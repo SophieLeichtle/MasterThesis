@@ -1,1 +1,4 @@
 ground_truth_pointclouds/**
+*.pyc
+*.pyo
+__pycache__/
