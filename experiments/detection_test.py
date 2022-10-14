@@ -12,7 +12,7 @@ import octomap
 import igibson
 from igibson.render.profiler import Profiler
 
-from src.environments.custom_env import CustomEnv
+from soph.environments.custom_env import CustomEnv
 
 def main(selection="user", headless=False, short_exec=False):
     """

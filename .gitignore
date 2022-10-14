@@ -1,4 +1,5 @@
-ground_truth_pointclouds/**
+soph/ground_truth_pointclouds/**
 *.pyc
 *.pyo
 __pycache__/
+*.egg-info/

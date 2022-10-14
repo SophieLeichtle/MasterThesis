@@ -10,8 +10,8 @@ def bbox(img):
 
     return rmin, rmax, cmin, cmax
 
-def openglf_to_wf(env):
-    eye_pos, eye_orn = env.robots[0].links["eyes"].get_position_orientation()
+def openglf_to_wf(robot):
+    eye_pos, eye_orn = robot.links["eyes"].get_position_orientation()
     camera_in_wf = quat2rotmat(xyzw2wxyz(eye_orn))
     camera_in_wf[:3,3] = eye_pos
 
@@ -19,7 +19,7 @@ def openglf_to_wf(env):
     camera_in_openglf = quat2rotmat(euler2quat(np.pi / 2.0, 0, -np.pi / 2.0))
 
     # Pose of the simulated robot in world frame
-    robot_pos, robot_orn = env.robots[0].get_position_orientation()
+    robot_pos, robot_orn = robot.get_position_orientation()
     robot_in_wf = quat2rotmat(xyzw2wxyz(robot_orn))
     robot_in_wf[:3, 3] = robot_pos
 
@@ -35,4 +35,4 @@ def pixel_to_point(env, row, column, depth):
     x = (column - 320) * z / f
     y = (240 - row) * z / f
     point_in_openglf = np.array([x,y,-z, 1])
-    return np.dot(openglf_to_wf(env), point_in_openglf)[:3]
+    return np.dot(openglf_to_wf(env.robots[0]), point_in_openglf)[:3]

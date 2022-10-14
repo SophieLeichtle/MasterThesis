@@ -1,6 +1,7 @@
 import logging
 import os
 from sys import platform
+import sys
 import numpy as np
 import open3d as o3d
 import argparse
@@ -12,9 +13,12 @@ from igibson.scenes.empty_scene import EmptyScene
 from igibson.utils.assets_utils import get_ig_avg_category_specs, get_ig_model_path
 from igibson.objects.articulated_object import URDFObject
 from igibson.utils.semantics_utils import get_class_name_to_class_id
+from igibson.external.pybullet_tools.utils import quat_from_euler
 
-from utils.utils import bbox
-from utils.pcd_dict import PointCloudDict
+from utils import bbox
+from pcd_dict import PointCloudDict
+
+from soph import point_clouds_path
 
 def main(selection="user", headless=False, short_exec=False):
     """
@@ -77,9 +81,12 @@ def main(selection="user", headless=False, short_exec=False):
                 fit_avg_dim_volume=True,
                 texture_randomization=False,
                 overwrite_inertial=True,
+                fixed_base=True
             )
     
     s.import_object(simulator_obj)
+    simulator_obj.set_position_orientation([0,0,0.7], quat_from_euler([0,0,0]))
+    s.step()
 
     point_cloud = PointCloudDict(precision=3, sub_precision=1)
     goal_id = get_class_name_to_class_id()[category]
@@ -92,8 +99,8 @@ def main(selection="user", headless=False, short_exec=False):
         y = args.radius * np.sin(theta[i]) * np.sin(phi[i])
         z = args.radius * np.cos(theta[i])
 
-        camera_pose = np.array([x,y,z])
-        view_direction = np.array([-x,-y,-z])
+        camera_pose = np.array([x,y,z+0.7])
+        view_direction = np.array([-x,-y,-z-0.7])
         s.renderer.set_camera(camera_pose, camera_pose + view_direction, [0, 0, 1])
         s.renderer.set_fov(90)
 
@@ -112,7 +119,9 @@ def main(selection="user", headless=False, short_exec=False):
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(point_cloud.point_array())
-    o3d.io.write_point_cloud("ground_truth_pointclouds/"+ category + "-" + model + ".ply", pcd)
+    pcd.translate((0,0,-0.7))
+    o3d.io.write_point_cloud(os.path.join(point_clouds_path,category+"-"+model+".ply"), pcd)
+    print(pcd.get_center())
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

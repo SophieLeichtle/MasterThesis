@@ -16,10 +16,10 @@ from igibson.render.profiler import Profiler
 from igibson.utils.motion_planning_wrapper import MotionPlanningWrapper
 from igibson.render.mesh_renderer.mesh_renderer_settings import MeshRendererSettings
 
-from src.utils.occupancy_grid import OccupancyGrid2D
-from src.utils.simple_pi import SimplePI
-from src.environments.custom_env import CustomEnv
-from src.utils.utils import pixel_to_point
+from soph.utils.occupancy_grid import OccupancyGrid2D
+from soph.utils.simple_pi import SimplePI
+from soph.environments.custom_env import CustomEnv
+from soph.utils.utils import pixel_to_point
 
 class RobotState(IntEnum):
     PLANNING = 0
