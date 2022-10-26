@@ -3,3 +3,5 @@ soph/ground_truth_pointclouds/**
 *.pyo
 __pycache__/
 *.egg-info/
+*.pt
+gitignore/**
