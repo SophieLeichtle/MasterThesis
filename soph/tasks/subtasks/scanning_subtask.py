@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 
 import open3d as o3d
 
-from tasks.subtasks.subtask_base import BaseSubtask
+from soph.tasks.subtasks.subtask_base import BaseSubtask
 
 from igibson.utils.mesh_util import quat2rotmat, xyzw2wxyz
 from transforms3d.euler import euler2quat
 
-from utils.utils import bbox, pixel_to_point
-from utils.pcd_dict import PointCloudDict
+from soph.utils.utils import bbox, pixel_to_point
+from soph.utils.pcd_dict import PointCloudDict
 
 class ScanSubtask(BaseSubtask):
     """

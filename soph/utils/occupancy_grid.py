@@ -6,17 +6,22 @@ class OccupancyGrid2D:
 
     def __init__(self, half_size=250, m_to_pix= 128.0/5.0):
         self.half_size = half_size
-        self.grid = np.zeros((self.half_size*2 + 1, self.half_size*2 + 1))
+        self.grid = np.zeros((self.half_size*2 + 1, self.half_size*2 + 1)).astype(np.float32)
         self.grid.fill(0.5)
-        self.origin = [half_size, half_size]
-        self.m_to_pix = m_to_pix
+        self.origin = np.array([half_size, half_size])
+        self.m_to_pix_ratio = m_to_pix
         self.coordinate_transform = np.array(((0, -1),(1, 0)))
+
+    def px_to_m(self, point):
+        return np.dot(np.linalg.inv(self.coordinate_transform),(point - self.origin) / self.m_to_pix_ratio)
+    def m_to_px(self, position):
+        return np.dot(self.coordinate_transform, position) * self.m_to_pix_ratio + self.origin
 
     def update_with_grid(self, occupancy_grid, position, theta):
         # y and x are switched in image coordinates, and y is flipped
         #robot_pos_in_map = position * self.m_to_pix 
         #robot_pos_in_map = np.array([-robot_pos_in_map[1], robot_pos_in_map[0]]) + self.origin
-        robot_pos_in_map = np.dot(self.coordinate_transform, position) * self.m_to_pix + self.origin
+        robot_pos_in_map = self.m_to_px(position)
 
         # Compute Rotation Matrix
         c, s = np.cos(theta), np.sin(theta)
@@ -39,26 +44,27 @@ class OccupancyGrid2D:
 
     def update_with_points(self, points):
         for point in points:
-            point_in_map = np.dot(self.coordinate_transform, point[:2]) * self.m_to_pix + self.origin
+            point_in_map = np.dot(self.coordinate_transform, point[:2]) * self.m_to_pix_ratio + self.origin
             for x in np.floor(point_in_map[1]).astype(np.int32), np.ceil(point_in_map[1]).astype(np.int32):
                     for y in np.floor(point_in_map[0]).astype(np.int32), np.ceil(point_in_map[0]).astype(np.int32):
                         self.grid[y][x] = 0
 
     def check_if_free(self, position, base_radius):
         filter = np.zeros_like(self.grid)
-        robot_pos_in_map = np.array([position[0], -position[1]]) * self.m_to_pix + self.origin
+        #Careful! Opencv uses different indexing so transformation is different
+        robot_pos_in_map = np.array([position[0], -position[1]]) * self.m_to_pix_ratio + self.origin
 
-        base_radius_in_map = int(base_radius * self.m_to_pix)
+        base_radius_in_map = int(base_radius * self.m_to_pix_ratio)
         cv2.circle(img=filter,center=robot_pos_in_map.astype(np.int32), radius=base_radius_in_map, color=1, thickness=-1)
         
         points = self.grid[filter==1]
         return 0 not in points and 0.5 not in points
 
     def check_new_information(self, position, theta, lin_range, ang_range, visualize=False):
-        robot_pos_in_map = np.dot(self.coordinate_transform, position) * self.m_to_pix + self.origin
+        robot_pos_in_map = self.m_to_px(position)
 
         angles = np.linspace(theta - ang_range/2, theta + ang_range/2, 30)
-        ranges = np.linspace(0, lin_range * self.m_to_pix, 20)
+        ranges = np.linspace(0, lin_range * self.m_to_pix_ratio, 20)
 
         new_info = 0
 

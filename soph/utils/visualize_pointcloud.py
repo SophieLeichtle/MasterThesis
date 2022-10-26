@@ -14,7 +14,7 @@ def main(selection="user", headless=False, short_exec=False):
     )
     args = parser.parse_args()
 
-    #pcd_load = o3d.io.read_point_cloud(os.path.join(point_clouds_path, args.path))
+    pcd_load = o3d.io.read_point_cloud(os.path.join(point_clouds_path, args.path))
     pcd_load = o3d.io.read_point_cloud(os.path.join(point_clouds_path, "test.ply"))
     o3d.visualization.draw_geometries([o3d.geometry.TriangleMesh.create_coordinate_frame(), pcd_load])
 

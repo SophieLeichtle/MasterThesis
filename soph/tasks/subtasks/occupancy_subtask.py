@@ -1,7 +1,7 @@
 from lib2to3.pytree import Base
 import numpy as np
 
-from tasks.subtasks.subtask_base import BaseSubtask
+from soph.tasks.subtasks.subtask_base import BaseSubtask
 
 class OccupancySubtask(BaseSubtask):
     """

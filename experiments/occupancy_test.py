@@ -20,6 +20,9 @@ from soph.utils.occupancy_grid import OccupancyGrid2D
 from soph.utils.simple_pi import SimplePI
 from soph.environments.custom_env import CustomEnv
 from soph.utils.utils import pixel_to_point
+from soph import configs_path
+
+from motion_planning import plan_base_motion
 
 class RobotState(IntEnum):
     PLANNING = 0
@@ -33,7 +36,7 @@ def main(selection="user", headless=False, short_exec=False):
     using the Gym interface, resetting it 10 times.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = "config/test_config.yaml"
+    config_filename = os.path.join(configs_path, "test_config.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     # Improving visuals in the example (optional)
@@ -41,8 +44,8 @@ def main(selection="user", headless=False, short_exec=False):
     config_data["enable_pbr"] = True
 
 
-    rendering_settings = MeshRendererSettings(optimized=False)
-    env = CustomEnv(config_file=config_data, rendering_settings=rendering_settings, mode="gui_interactive")
+    #rendering_settings = MeshRendererSettings(optimized=False)
+    env = CustomEnv(config_file=config_data, mode="gui_interactive")
 
 
     max_iterations = 1 if not short_exec else 1
@@ -123,14 +126,17 @@ def main(selection="user", headless=False, short_exec=False):
                                 best_point = point
                                 best_theta = thetas[y]
                     if best_info == 0: continue
-                    plan = motion_planner.plan_base_motion([best_point[0], best_point[1], best_theta])
-                    current_plan = plan
+                    #plan = motion_planner.plan_base_motion([best_point[0], best_point[1], best_theta])
+                    plan2 = plan_base_motion(env.robots[0], [best_point[0], best_point[1], best_theta], grid)
+                    print(plan2)
+                    current_plan = plan2
                 else:
                     goal = np.array(current_plan[0])
                     robot_state = np.array([new_robot_pos[0], new_robot_pos[1], new_robot_theta])
                     pi_controller.reset_goal(goal, robot_state)
                 
                     #TODO replace with real movement/control
+                    print(current_plan)
                     motion_planner.dry_run_base_plan(current_plan)
                     current_plan = None
                     print(best_info)

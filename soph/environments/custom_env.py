@@ -19,9 +19,9 @@ from igibson.sensors.scan_sensor import ScanSensor
 from igibson.sensors.vision_sensor import VisionSensor
 from igibson.utils.utils import quatToXYZW
 
-from tasks.obj_detection_task import ObjectDetectionTask
-from tasks.subtasks.occupancy_subtask import OccupancySubtask
-from tasks.subtasks.scanning_subtask import ScanSubtask
+from soph.tasks.obj_detection_task import ObjectDetectionTask
+from soph.tasks.subtasks.occupancy_subtask import OccupancySubtask
+from soph.tasks.subtasks.scanning_subtask import ScanSubtask
 
 log = logging.getLogger(__name__)
 

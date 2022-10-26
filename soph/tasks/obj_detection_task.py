@@ -13,8 +13,8 @@ from igibson.reward_functions.collision_reward import CollisionReward
 from igibson.utils.utils import rotate_vector_3d, l2_distance
 
 
-from goals.obj_detection_goal import ObjectDetectionGoal
-from rewards.obj_detection_reward import ObjectDetectionReward
+from soph.goals.obj_detection_goal import ObjectDetectionGoal
+from soph.rewards.obj_detection_reward import ObjectDetectionReward
 
 class ObjectDetectionTask(BaseTask):
     """
