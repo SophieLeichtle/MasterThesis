@@ -18,9 +18,6 @@ class OccupancyGrid2D:
         return np.dot(self.coordinate_transform, position) * self.m_to_pix_ratio + self.origin
 
     def update_with_grid(self, occupancy_grid, position, theta):
-        # y and x are switched in image coordinates, and y is flipped
-        #robot_pos_in_map = position * self.m_to_pix 
-        #robot_pos_in_map = np.array([-robot_pos_in_map[1], robot_pos_in_map[0]]) + self.origin
         robot_pos_in_map = self.m_to_px(position)
 
         # Compute Rotation Matrix
