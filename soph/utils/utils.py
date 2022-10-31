@@ -3,6 +3,9 @@ from igibson.utils.mesh_util import quat2rotmat, xyzw2wxyz
 from transforms3d.euler import euler2quat
 
 def bbox(img):
+    """
+    Get a bounding box of the non-zero pixels in an image
+    """
     rows = np.any(img, axis=1)
     cols = np.any(img, axis=0)
     rmin, rmax = np.where(rows)[0][[0, -1]]
@@ -11,6 +14,9 @@ def bbox(img):
     return rmin, rmax, cmin, cmax
 
 def openglf_to_wf(robot):
+    """
+    Transform a 3D point in the openglf frame of the robot eyes camera to world frame
+    """
     eye_pos, eye_orn = robot.links["eyes"].get_position_orientation()
     camera_in_wf = quat2rotmat(xyzw2wxyz(eye_orn))
     camera_in_wf[:3,3] = eye_pos
@@ -29,6 +35,9 @@ def openglf_to_wf(robot):
     return np.matmul(robot_in_wf, np.matmul(cam_in_robot_frame, camera_in_openglf))
 
 def pixel_to_point(env, row, column, depth):
+    """
+    Given a pixel on a depth image, convert it to a world coordinate point.
+    """
     z = depth * env.config["depth_high"]
     assert(z != 0)
     f = 579.4 # TODO get from intrinsics

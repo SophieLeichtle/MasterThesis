@@ -58,20 +58,28 @@ def plan_base_motion(
     return path
 
 def dry_run_base_plan(env, path):
-        """
-        Dry run base motion plan by setting the base positions without physics simulation
+    """
+    Dry run base motion plan by setting the base positions without physics simulation
 
-        :param path: base waypoints or None if no plan can be found
-        """
-        if path is not None:
-            for way_point in path:
-                set_base_values_with_z(
-                    env.robots[0].get_body_ids()[0], [way_point[0], way_point[1], way_point[2]], z=env.initial_pos_z_offset
-                )
-                env.simulator.sync()
-                # sleep(0.005) # for animation
+    :param path: base waypoints or None if no plan can be found
+    """
+    if path is not None:
+        for way_point in path:
+            set_base_values_with_z(
+                env.robots[0].get_body_ids()[0], [way_point[0], way_point[1], way_point[2]], z=env.initial_pos_z_offset
+            )
+            env.simulator.sync()
+            # sleep(0.005) # for animation
 
 def extract_frontiers(map_2d):
+    """
+    Extract frontiers from the occupancy map. 
+    A frontier is a transition from explored free space to unexplored space
+    Returns List of Frontier Lines (List of List of 2d Vectors)
+
+    :param map_2d: 2d occupancy map of type np.array
+    """
+
     known_map = map_2d != 0.5
     eroded_map = binary_erosion(known_map)
     outline = known_map ^ eroded_map
@@ -102,7 +110,16 @@ def extract_frontiers(map_2d):
         lines.append(line)
     return lines
 
-def sample_around_frontier(frontier_line, map, robot_footprint=0.32):
+def sample_around_frontier(frontier_line, map, robot_footprint_radius=0.32):
+    """
+    Sample points along the frontier. The points must be unoccupied.
+    A line is fit along the frontier and the samples are sampled a set distance perpendicular from the line
+
+    :param frontier_line: List of Points making up the frontier
+    :param map: occupancy map of type OccupancyGrid2D
+    :param robot_footprint_radius: footprint radius of the robot base, used for distance of samples to line
+    """
+    
     line_stack = np.vstack(frontier_line)
     domain = [np.min(line_stack[:,1]),np.max(line_stack[:,1])]
     polynomial = np.polynomial.polynomial.Polynomial.fit(line_stack[:, 1], line_stack[:, 0], 1, domain).convert()
@@ -111,7 +128,7 @@ def sample_around_frontier(frontier_line, map, robot_footprint=0.32):
     angle = np.arctan2(vec[0], vec[1])
 
     samples = sample(frontier_line, 10)
-    dist = 1.2 *  robot_footprint * map.m_to_pix_ratio
+    dist = 1.2 *  robot_footprint_radius * map.m_to_pix_ratio
 
     valid_samples = []
     for samp in samples:

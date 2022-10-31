@@ -109,10 +109,6 @@ def main():
             dry_run_base_plan(env, current_plan)
             current_state = RobotState.UPDATING
         elif current_state is RobotState.UPDATING:
-            state = env.get_state()
-            robot_pos = env.robots[0].get_position()[:2]
-            robot_theta = env.robots[0].get_rpy()[2]
-            
             map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
             
             #Sample points from depth sensor to accompany lidar occupancy grid

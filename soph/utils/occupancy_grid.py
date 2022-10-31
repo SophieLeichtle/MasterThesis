@@ -13,11 +13,25 @@ class OccupancyGrid2D:
         self.coordinate_transform = np.array(((0, -1),(1, 0)))
 
     def px_to_m(self, point):
+        """
+        Convert a pixel to meters. Pixel does not need to be an integer.
+        """
         return np.dot(np.linalg.inv(self.coordinate_transform),(point - self.origin) / self.m_to_pix_ratio)
     def m_to_px(self, position):
+        """
+        Convert a position in meters to pixels. Returns floating point pixel.
+        """
         return np.dot(self.coordinate_transform, position) * self.m_to_pix_ratio + self.origin
 
     def update_with_grid(self, occupancy_grid, position, theta):
+        """
+        Update the occupancy grid using an external occupancy grid. 
+        Assumes the m to px ratio is the same for both.
+
+        :param occupancy_grid: external occupancy grid
+        :param position: robot position in world space
+        :param theta: robot theta in world space
+        """
         robot_pos_in_map = self.m_to_px(position)
 
         # Compute Rotation Matrix
@@ -40,6 +54,11 @@ class OccupancyGrid2D:
                             self.grid[y][x] = occupancy_grid[r][c]
 
     def update_with_points(self, points):
+        """
+        Update the occupancy grid using 3d points
+
+        :param points: list of points in world space
+        """
         for point in points:
             point_in_map = np.dot(self.coordinate_transform, point[:2]) * self.m_to_pix_ratio + self.origin
             for x in np.floor(point_in_map[1]).astype(np.int32), np.ceil(point_in_map[1]).astype(np.int32):
@@ -48,6 +67,12 @@ class OccupancyGrid2D:
                             self.grid[y][x] = 0
 
     def check_if_free(self, position, base_radius):
+        """
+        Check if a certain position is free given a robot base radius
+
+        :param position: position of base in world space
+        :param base_radius: robot base radius
+        """
         filter = np.zeros_like(self.grid)
         #Careful! Opencv uses different indexing so transformation is different
         robot_pos_in_map = np.array([position[0], -position[1]]) * self.m_to_pix_ratio + self.origin
@@ -59,6 +84,14 @@ class OccupancyGrid2D:
         return 0 not in points and 0.5 not in points
 
     def check_new_information(self, position, theta, lin_range, ang_range, visualize=False):
+        """
+        Estimates information gain for a given robot configuration by casting rays.
+
+        :param position, theta: robot position and theta
+        :param lin_range: linear range of the lidar 
+        :param ang_range: angular range of the lidar
+        :param visualize: if true, visualize information gain
+        """
         robot_pos_in_map = self.m_to_px(position)
 
         angles = np.linspace(theta - ang_range/2, theta + ang_range/2, 30)
