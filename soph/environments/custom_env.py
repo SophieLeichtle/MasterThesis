@@ -22,6 +22,7 @@ from igibson.utils.utils import quatToXYZW
 from soph.tasks.obj_detection_task import ObjectDetectionTask
 from soph.tasks.subtasks.occupancy_subtask import OccupancySubtask
 from soph.tasks.subtasks.scanning_subtask import ScanSubtask
+from soph.tasks.nothing_task import NothingTask
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class CustomEnv(BaseEnv):
 
         # task
         if "task" not in self.config:
-            self.task = DummyTask(self)
+            self.task = NothingTask(self)
         elif self.config["task"] == "obj_detection":
             self.task = ObjectDetectionTask(self)
         else:

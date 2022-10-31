@@ -44,7 +44,8 @@ class OccupancyGrid2D:
             point_in_map = np.dot(self.coordinate_transform, point[:2]) * self.m_to_pix_ratio + self.origin
             for x in np.floor(point_in_map[1]).astype(np.int32), np.ceil(point_in_map[1]).astype(np.int32):
                     for y in np.floor(point_in_map[0]).astype(np.int32), np.ceil(point_in_map[0]).astype(np.int32):
-                        self.grid[y][x] = 0
+                        if self.grid[y][x] != 0.5:
+                            self.grid[y][x] = 0
 
     def check_if_free(self, position, base_radius):
         filter = np.zeros_like(self.grid)
