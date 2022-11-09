@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+from soph.utils.utils import pixel_to_point
 
 class OccupancyGrid2D:
 
@@ -66,6 +67,19 @@ class OccupancyGrid2D:
                         if self.grid[y][x] != 0.5:
                             self.grid[y][x] = 0
 
+    def update_from_depth(self, env, depth, samplesize = 1000):
+        rows = np.random.randint(depth.shape[0], size = samplesize)
+        columns = np.random.randint(depth.shape[0], size = samplesize)
+        points = []
+        for it in range(0, samplesize):
+            d = depth[rows[it], columns[it],0]
+            if d == 0 : continue
+            p = pixel_to_point(env, rows[it], columns[it], d)
+            if p[2] > 0.05:
+                points.append(p)
+        self.update_with_points(points)
+
+
     def check_if_free(self, position, base_radius):
         """
         Check if a certain position is free given a robot base radius
@@ -73,12 +87,17 @@ class OccupancyGrid2D:
         :param position: position of base in world space
         :param base_radius: robot base radius
         """
+        #If center point is not free can skip more intensive calculations
+        robot_pos_in_map = self.m_to_px(position)
+        if self.grid[int(robot_pos_in_map[0]), int(robot_pos_in_map[1])] != 1:
+            return False
+
         filter = np.zeros_like(self.grid)
         #Careful! Opencv uses different indexing so transformation is different
-        robot_pos_in_map = np.array([position[0], -position[1]]) * self.m_to_pix_ratio + self.origin
+        robot_pos_in_map_cv = np.array([position[0], -position[1]]) * self.m_to_pix_ratio + self.origin
 
         base_radius_in_map = int(base_radius * self.m_to_pix_ratio)
-        cv2.circle(img=filter,center=robot_pos_in_map.astype(np.int32), radius=base_radius_in_map, color=1, thickness=-1)
+        cv2.circle(img=filter,center=robot_pos_in_map_cv.astype(np.int32), radius=base_radius_in_map, color=1, thickness=-1)
         
         points = self.grid[filter==1]
         return 0 not in points and 0.5 not in points

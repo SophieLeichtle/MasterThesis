@@ -43,7 +43,6 @@ def get_predictions(img_tensor, model):
     with torch.no_grad():
         pred = model(img_tensor)[0]
     pred = non_max_suppression(pred)
-    print(pred)
     return pred
 
 @torch.no_grad()

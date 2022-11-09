@@ -45,3 +45,27 @@ def pixel_to_point(env, row, column, depth):
     y = (240 - row) * z / f
     point_in_openglf = np.array([x,y,-z, 1])
     return np.dot(openglf_to_wf(env.robots[0]), point_in_openglf)[:3]
+
+def fit_detections_to_point(detections):
+    S = np.zeros((2,2))
+    C = np.zeros((2,1))
+
+    for d in detections:
+        unitv = np.array([[np.cos(d[2])], [np.sin(d[2])]])
+        point = np.array([[d[0]],[d[1]]])
+        mat = unitv @ unitv.transpose() - np.eye(2)
+        S += mat
+        C += mat @ point
+    print(S)
+    print(C)
+
+    intersection = np.linalg.pinv(S) @ C
+    return np.array([intersection[0,0], intersection[1,0]])
+
+def check_detections_for_viewpoints(detections):
+    theta1 = detections[0][2]
+    for d in detections:
+        delta_theta = theta1 - d[2]
+        if abs(delta_theta) > np.pi / 12:
+            return True
+    return False
