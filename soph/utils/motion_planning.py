@@ -13,7 +13,7 @@ def plan_base_motion(
     visualize_result=False,
     optimize_iter=0,
     algorithm="birrt",
-    robot_footprint_radius=0.2
+    robot_footprint_radius=0.3
 ):
     """
     Plan base motion given a base goal
@@ -188,61 +188,52 @@ def plan_with_frontiers(env, map):
 
 
 def plan_detection_frontier(env, map, detection):
-    best_dist = np.inf
-    best_frontier = None
+    
 
     frontier_lines = extract_frontiers(map.grid)
     vec = np.array([np.cos(detection[2]), np.sin(detection[2])])
-    print(detection)
-    print(vec)
-    for line in frontier_lines:
-        if len(line) < 10: continue
-
-        min_dist = np.inf
-        for frontier_point in line:
-            frontier_point = map.px_to_m(frontier_point)
-
-            px = frontier_point[0]
-            py = frontier_point[1]
-            x0 = detection[0]
-            y0 = detection[1]
-            u0 = vec[0]
-            v0 = vec[1]
-
-            a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
-            if a < 0: continue
-            dist = (x0 + a*u0 - px) / v0
-            if np.abs(dist) < best_dist:
-                min_dist = np.abs(dist)
-        if min_dist < best_dist:
-            best_dist = min_dist
-            best_frontier = line
-
-    print(best_frontier)
-    print(best_dist)
-
-    plt.figure()
-    plt.imshow(map.grid)
-    plt.savefig("map.jpg")
-    plt.close()
-
-  
     current_plan = None
-    robot_pos = env.robots[0].get_position()[:2]
-    robot_theta = env.robots[0].get_rpy()[2]  
-    samples = sample_around_frontier(best_frontier, map)
-    print(samples)
-    samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
-    for s in samples:
-        print(s)
-        if not map.check_if_free(np.array([s[0],s[1]]), 0.35): continue
-        s[2] = detection[2]
-        plan = plan_base_motion(env.robots[0], s, map)
-        print(plan)
-        if plan is None: continue
-        current_plan = plan
-        break
-    input("enter")
+
+    while current_plan is None and len(frontier_lines) > 0:
+        best_dist = np.inf
+        best_frontier = None
+        for line in frontier_lines:
+            if len(line) < 10: continue
+
+            min_dist = np.inf
+            for frontier_point in line:
+                frontier_point = map.px_to_m(frontier_point)
+
+                px = frontier_point[0]
+                py = frontier_point[1]
+                x0 = detection[0]
+                y0 = detection[1]
+                u0 = vec[0]
+                v0 = vec[1]
+
+                a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
+                if a < 0: continue
+                dist = (x0 + a*u0 - px) / v0
+                if np.abs(dist) < best_dist:
+                    min_dist = np.abs(dist)
+            if min_dist < best_dist:
+                best_dist = min_dist
+                best_frontier = line
+    
+        current_plan = None
+        robot_pos = env.robots[0].get_position()[:2]
+        robot_theta = env.robots[0].get_rpy()[2]  
+        samples = sample_around_frontier(best_frontier, map)
+        samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
+        for s in samples:
+            if not map.check_if_free(np.array([s[0],s[1]]), 0.35): continue
+            s[2] = detection[2]
+            plan = plan_base_motion(env.robots[0], s, map)
+            if plan is None: continue
+            current_plan = plan
+            break
+        if current_plan is None:
+            frontier_lines.remove(best_frontier)
     return current_plan
 
 def refine_frontier(frontier_line, threshold = 5):

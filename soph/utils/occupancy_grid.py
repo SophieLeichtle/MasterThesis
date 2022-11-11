@@ -69,7 +69,7 @@ class OccupancyGrid2D:
 
     def update_from_depth(self, env, depth, samplesize = 1000):
         rows = np.random.randint(depth.shape[0], size = samplesize)
-        columns = np.random.randint(depth.shape[0], size = samplesize)
+        columns = np.random.randint(depth.shape[1], size = samplesize)
         points = []
         for it in range(0, samplesize):
             d = depth[rows[it], columns[it],0]

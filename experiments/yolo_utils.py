@@ -75,3 +75,30 @@ def save_seg_image(path, pred, img_tensor, brg_img, names, colors):
                 plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
         cv2.imwrite(path, im0)
 
+def get_detection(env, model, device, names, colors, label, save_image = False):
+    state = env.get_state()
+    img = state["rgb"]
+    img = np.clip(img*255, 0, 255)
+    img = img.astype(np.uint8)
+    img_tensor, brg_img = prepare_image(img[:,:,:3], device)
+    predictions = get_predictions(img_tensor, model)
+    if save_image:
+        save_seg_image("sego.png", predictions, img_tensor, brg_img, names, colors)
+    detected_labels = {}
+    for i, det in enumerate(predictions):
+        if len(det):
+            for *xyxy, conf, cls in reversed(det):
+                if conf > 0.6:
+                    detected_labels[names[int(cls)]] = xyxy
+
+    if label in detected_labels.keys():
+        robot_pos = env.robots[0].get_position()[:2]
+        robot_theta = env.robots[0].get_rpy()[2]
+        xyxy = detected_labels[label]
+        center_col = (int(xyxy[2]) + int(xyxy[0])) / 2
+        f = 579.4
+        theta_rel = np.arctan2(320 - center_col,f)
+        detection_theta = robot_theta + theta_rel
+        newest_detection = [robot_pos[0], robot_pos[1], detection_theta]
+        return newest_detection
+    return None
