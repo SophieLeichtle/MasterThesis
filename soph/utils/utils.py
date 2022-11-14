@@ -56,8 +56,6 @@ def fit_detections_to_point(detections):
         mat = unitv @ unitv.transpose() - np.eye(2)
         S += mat
         C += mat @ point
-    print(S)
-    print(C)
 
     intersection = np.linalg.pinv(S) @ C
     return np.array([intersection[0,0], intersection[1,0]])

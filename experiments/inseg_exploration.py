@@ -4,11 +4,9 @@ import yaml
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import cv2
+import time
 
 from enum import IntEnum
-
-from scipy.ndimage import binary_erosion
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
@@ -16,8 +14,9 @@ from soph.utils.occupancy_grid import OccupancyGrid2D
 
 from soph.utils.motion_planning import plan_with_frontiers, teleport, plan_detection_frontier
 from soph.utils.utils import fit_detections_to_point, check_detections_for_viewpoints
-from yolo_mask_utils import create_model, get_detection
+from soph.utils.logging_utils import save_map, initiate_logging
 
+from yolo_mask_utils import create_model, get_detection
 class RobotState(IntEnum):
     INIT = 0 # unused for now
     PLANNING = 1
@@ -25,7 +24,7 @@ class RobotState(IntEnum):
     UPDATING = 3
     END = 4
 
-def main():
+def main(log_dir):
     """
     Create an igibson environment. 
     The robot tries to perform a simple frontiers based exploration of the environment.
@@ -36,13 +35,17 @@ def main():
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     # Create Environment
+    logging.info("Creating Environment")
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
     env.reset()
 
     # Create Map
     map = OccupancyGrid2D(half_size=350)
     
+    logging.info("Creating Model")
     model, device, hyp = create_model()
+
+    logging.info("Entering State: INIT")
 
     # Initial Map Update
     state = env.get_state()
@@ -68,16 +71,17 @@ def main():
 
     current_state = RobotState.PLANNING
 
- 
+    save_map(log_dir, map.grid)
 
     detected = False
-    newest_detection = None
     detections = []
-    print("Starting Planning")
+    logging.info("Entering State: PLANNING")
+    
+    planning_attempts = 0
+    max_planning_attempts = 10
     while True:
-        
-        
         if current_state is RobotState.PLANNING:
+            planning_attempts += 1
             env.step(None)
             if not detected:
                 current_plan = plan_with_frontiers(env, map)
@@ -86,21 +90,24 @@ def main():
                     point = fit_detections_to_point(detections=detections)
                     point_in_map = map.m_to_px(point)
                     if map.grid[int(point_in_map[0]), int(point_in_map[1])] != 0.5:
-                        print(point_in_map)
                         current_state = RobotState.END
-                        print("move to end state")
+                        logging.info("Arrived at Goal")
+                        logging.info("Simulation time: " + f'{sim_time}s')
+                        logging.info("Entering State: END")
                         continue
                 current_plan = plan_detection_frontier(env, map, detections[-1])
             if current_plan is not None:
                 current_state = RobotState.MOVING
-                print("Starting Moving")
+                logging.info("Entering State: MOVING")
+                planning_attempts = 0
             else:
-                plt.figure()
-                plt.imshow(map.grid)
-                plt.savefig("map.jpg")
-                plt.close()
-                input("Enter")
-                
+                if planning_attempts <= max_planning_attempts:
+                    logging.warning("No plan found. Attempting Planning again.")
+                else:
+                    logging.warning("Max Planning Attempts reached")
+                    logging.info("Entering State: End")
+                    current_state = RobotState.END
+
 
         elif current_state is RobotState.MOVING:
             current_point = current_plan.pop(0)
@@ -108,7 +115,8 @@ def main():
             if len(current_plan) == 0:
                 current_plan = None
                 current_state = RobotState.UPDATING
-                print("Starting Updating")
+                logging.info("Current Plan Executed")
+                logging.info("Entering State: UPDATING")
                 continue
             if detected: continue
 
@@ -118,7 +126,8 @@ def main():
                 detections.append(detection)
                 current_plan = None
                 current_state = RobotState.UPDATING
-                print("Starting Updating")
+                logging.info("First Detection Made")
+                logging.info("Entering State: UPDATING")
             
 
         elif current_state is RobotState.UPDATING:
@@ -131,6 +140,7 @@ def main():
             depth = state["depth"]
             map.update_from_depth(env, depth)
             
+            save_map(log_dir, map.grid)
 
             detection, mask = get_detection(env, model, device, hyp, "chair", True)
             if detection is not None:
@@ -139,11 +149,14 @@ def main():
                 masked_depth = depth[:,:,0] * mask
                 if masked_depth.max() > 0:
                     current_state = RobotState.END
-                    print("move to end state")
+                    sim_time = env.simulation_time()
+                    logging.info("Arrived at Goal")
+                    logging.info("Simulation time: " + f'{sim_time}')
+                    logging.info("Entering State: END")
                     continue
             
             current_state = RobotState.PLANNING
-            print("Starting Planning")
+            logging.info("Entering State: PLANNING")
 
 
         elif current_state is RobotState.END:
@@ -153,5 +166,5 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main()
+    dir_path = initiate_logging("inseg_exploration.log")
+    main(dir_path)
