@@ -120,7 +120,7 @@ def main(log_dir):
                 continue
             if detected: continue
 
-            detection, mask = get_detection(env, model, device, hyp, "chair", True)
+            detection, mask = get_detection(env, model, device, hyp, "dining table", True)
             if detection is not None:
                 detected = True
                 detections.append(detection)
@@ -142,7 +142,7 @@ def main(log_dir):
             
             save_map(log_dir, map.grid)
 
-            detection, mask = get_detection(env, model, device, hyp, "chair", True)
+            detection, mask = get_detection(env, model, device, hyp, "dining table", True)
             if detection is not None:
                 detected = True
                 detections.append(detection)
