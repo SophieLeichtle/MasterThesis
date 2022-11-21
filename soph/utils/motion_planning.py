@@ -127,6 +127,58 @@ def extract_frontiers(map_2d):
         lines.extend(refined)
     return lines
 
+def refine_frontier(frontier_line, threshold = 5):
+    if len(frontier_line) < 10: return [frontier_line]
+    current_extremes = [frontier_line[-1], frontier_line[-2]]
+
+    furthest_point = None
+    furthest_dist = 0
+    unitv = np.array(current_extremes[0]) - np.array(current_extremes[1])
+    unitv = unitv / np.linalg.norm(unitv)
+    for point in frontier_line:
+        d = point_to_line_dist(point, current_extremes[0], unitv)
+        if np.abs(d) > furthest_dist:
+            furthest_dist = np.abs(d)
+            furthest_point = point
+    if furthest_dist < threshold: return [frontier_line]
+    line1 = []
+    line2 = []
+    for point in frontier_line:
+        d = point_to_line_dist(point, furthest_point, [unitv[1], -unitv[0]])
+        if d < 0:
+            line1.append(point)
+        elif d > 0:
+            line2.append(point)
+    if point_to_line_dist(current_extremes[0], furthest_point, [unitv[1], -unitv[0]]) < 0:
+        line1.append(current_extremes[0])
+        line2.append(current_extremes[1])
+    else:
+        line1.append(current_extremes[1])
+        line2.append(current_extremes[0])
+    line1.append(furthest_point)
+    line2.append(furthest_point)
+    newfrontiers = []
+    newfrontiers.extend(refine_frontier(line1, threshold=threshold))
+    newfrontiers.extend(refine_frontier(line2, threshold=threshold))
+    return newfrontiers
+
+def point_to_line_dist(p, line_origin, unit_v):
+    px = p[0]
+    py = p[1]
+    x0 = line_origin[0]
+    y0 = line_origin[1]
+    u0 = unit_v[0]
+    v0 = unit_v[1]
+    if u0 == 0:
+        return (x0 - px) / v0
+    if v0 == 0:
+        return (y0 - py) / u0
+    ratio = v0 / u0
+    a = ((px + ratio * py) - (x0 + ratio * y0))/(u0 + ratio * v0)
+    dist = (x0 + a*u0 - px) / v0
+    return dist
+
+
 def sample_around_frontier(frontier_line, map, robot_footprint_radius=0.32):
     """
     Sample points along the frontier. The points must be unoccupied.
@@ -236,53 +288,58 @@ def plan_detection_frontier(env, map, detection):
             frontier_lines.remove(best_frontier)
     return current_plan
 
-def refine_frontier(frontier_line, threshold = 5):
-    if len(frontier_line) < 10: return [frontier_line]
-    current_extremes = [frontier_line[-1], frontier_line[-2]]
+def plan_frontier_with_poi(env, map, poi):
+    # almost identical to planning with detection but the frontier is behind instead of in front
 
-    furthest_point = None
-    furthest_dist = 0
-    unitv = np.array(current_extremes[0]) - np.array(current_extremes[1])
-    unitv = unitv / np.linalg.norm(unitv)
-    for point in frontier_line:
-        d = point_to_line_dist(point, current_extremes[0], unitv)
-        if np.abs(d) > furthest_dist:
-            furthest_dist = np.abs(d)
-            furthest_point = point
-    if furthest_dist < threshold: return [frontier_line]
-    line1 = []
-    line2 = []
-    for point in frontier_line:
-        d = point_to_line_dist(point, furthest_point, [unitv[1], -unitv[0]])
-        if d < 0:
-            line1.append(point)
-        elif d > 0:
-            line2.append(point)
-    if point_to_line_dist(current_extremes[0], furthest_point, [unitv[1], -unitv[0]]) < 0:
-        line1.append(current_extremes[0])
-        line2.append(current_extremes[1])
-    else:
-        line1.append(current_extremes[1])
-        line2.append(current_extremes[0])
-    line1.append(furthest_point)
-    line2.append(furthest_point)
-    newfrontiers = []
-    newfrontiers.extend(refine_frontier(line1, threshold=threshold))
-    newfrontiers.extend(refine_frontier(line2, threshold=threshold))
-    return newfrontiers
+    frontier_lines = extract_frontiers(map.grid)
+    vec = np.array([np.cos(poi[2]), np.sin(poi[2])])
+    current_plan = None
 
-def point_to_line_dist(p, line_origin, unit_v):
-    px = p[0]
-    py = p[1]
-    x0 = line_origin[0]
-    y0 = line_origin[1]
-    u0 = unit_v[0]
-    v0 = unit_v[1]
-    if u0 == 0:
-        return (x0 - px) / v0
-    if v0 == 0:
-        return (y0 - py) / u0
-    ratio = v0 / u0
-    a = ((px + ratio * py) - (x0 + ratio * y0))/(u0 + ratio * v0)
-    dist = (x0 + a*u0 - px) / v0
-    return dist
+    while current_plan is None and len(frontier_lines) > 0:
+        best_dist = np.inf
+        best_frontier = None
+        for line in frontier_lines:
+            if len(line) < 10: continue
+
+            min_dist = np.inf
+            for frontier_point in line:
+                frontier_point = map.px_to_m(frontier_point)
+
+                px = frontier_point[0]
+                py = frontier_point[1]
+                x0 = poi[0]
+                y0 = poi[1]
+                u0 = vec[0]
+                v0 = vec[1]
+
+                a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
+                if a > 0: continue
+                dist = (x0 + a*u0 - px) / v0
+                if np.abs(dist) < best_dist:
+                    min_dist = np.abs(dist)
+            if min_dist < best_dist:
+                best_dist = min_dist
+                best_frontier = line
+    
+        current_plan = None
+        robot_pos = env.robots[0].get_position()[:2]
+        robot_theta = env.robots[0].get_rpy()[2]  
+        samples = sample_around_frontier(best_frontier, map)
+        samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
+        for s in samples:
+            if not map.check_if_free(np.array([s[0],s[1]]), 0.35): continue
+            s[2] = poi[2]
+            plan = plan_base_motion(env.robots[0], s, map)
+            if plan is None: continue
+            current_plan = plan
+            break
+        if current_plan is None:
+            frontier_lines.remove(best_frontier)
+    return current_plan
+
+
+def get_poi(detection, max_depth = 3.5):
+    unitv = np.array([np.cos(detection[2]), np.sin(detection[2])])
+    position = np.array([detection[0], detection[1]])
+    new_pos = position + max_depth * unitv
+    return np.array([new_pos[0],new_pos[1],detection[2]])

@@ -132,3 +132,50 @@ def get_detection(env, model, device, hyp, label, save_image = False):
     newest_detection = [robot_pos[0], robot_pos[1], detection_theta]
 
     return newest_detection, pred_mask_np
+
+def get_detections(env, model, device, hyp, label, save_image = False):
+    state = env.get_state()
+    img = state["rgb"]
+    img = np.clip(img*255, 0, 255)
+    img = img.astype(np.uint8)
+    img_tensor, brg_img, padding = prepare_image(img[:,:,:3], device)
+    predictions, pred_masks, names = get_predictions(img_tensor, model, hyp)
+    if predictions is None:
+        return None, None
+    if save_image:
+        save_seg_image("insseg.png", img_tensor, predictions, pred_masks, hyp, names)
+    pred_cls = predictions[:, 5].detach().cpu().numpy()
+    pred_conf = predictions[:, 4].detach().cpu().numpy()
+    indexes = []
+    for i in range(len(pred_cls)):
+        if pred_conf[i] < 0.6: continue
+        if names[int(pred_cls[i])] == label:
+            indexes.append(i)
+    if len(indexes) == 0: return None, None
+
+    detections = []
+    masks = []
+
+    for index in indexes:
+        bboxes = Boxes(predictions[:,:4])
+        bbox = bboxes.tensor.detach().cpu().numpy().astype(np.int)
+        bbox = bbox[index,:]
+        nb, _, height, width = img_tensor.shape
+        original_pred_masks = pred_masks.view(-1, hyp['mask_resolution'], hyp['mask_resolution'])
+        pred_mask = retry_if_cuda_oom(paste_masks_in_image)(original_pred_masks, bboxes, (height,width), threshold=0.5)
+        pred_mask_np = pred_mask.detach().cpu().numpy()
+        pred_mask_np = pred_mask_np[index, :, :]
+
+        robot_pos = env.robots[0].get_position()[:2]
+        robot_theta = env.robots[0].get_rpy()[2]
+
+        center_col = (int(bbox[2]) + int(bbox[0])) / 2
+        f = 579.4
+        theta_rel = np.arctan2(320 - center_col,f)
+        detection_theta = robot_theta + theta_rel
+        newest_detection = [robot_pos[0], robot_pos[1], detection_theta]
+
+        detections.append(newest_detection)
+        masks.append(pred_mask_np)
+
+    return detections, masks

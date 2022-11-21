@@ -80,7 +80,7 @@ class OccupancyGrid2D:
         self.update_with_points(points)
 
 
-    def check_if_free(self, position, base_radius):
+    def check_if_free(self, position, base_radius=0.3):
         """
         Check if a certain position is free given a robot base radius
 

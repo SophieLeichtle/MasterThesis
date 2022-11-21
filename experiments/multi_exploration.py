@@ -12,12 +12,13 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.utils.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import plan_with_frontiers, teleport, plan_detection_frontier
-from soph.utils.utils import fit_detections_to_point, check_detections_for_viewpoints
+from soph.utils.motion_planning import plan_with_frontiers, teleport, get_poi, plan_base_motion, plan_frontier_with_poi
 from soph.utils.logging_utils import save_map, initiate_logging
+from soph.utils.utils import bbox, pixel_to_point
 
-from experiments.yolo_mask_utils import create_model, get_detection
+from soph.utils.detection_tool import DetectionTool, DefinitiveDetection
 
+from yolo_mask_utils import create_model, get_detections
 class RobotState(IntEnum):
     INIT = 0 # unused for now
     PLANNING = 1
@@ -34,6 +35,8 @@ def main(log_dir):
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
     config_filename = os.path.join(configs_path, "seg_explore copy.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
+
+    queried_semantic = "chair"
 
     # Create Environment
     logging.info("Creating Environment")
@@ -53,7 +56,6 @@ def main(log_dir):
     robot_pos = env.robots[0].get_position()[:2]
     robot_theta = env.robots[0].get_rpy()[2]
     map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-
     current_state = RobotState.INIT
     # Init done outside loop for now
     for i in range(10):
@@ -73,10 +75,12 @@ def main(log_dir):
 
     current_state = RobotState.PLANNING
 
-    save_map(log_dir, map.grid)
+    
 
-    detected = False
-    detections = []
+    detection_tool = DetectionTool()
+
+    save_map(log_dir, robot_pos, map, detection_tool)
+
     logging.info("Entering State: PLANNING")
     
     planning_attempts = 0
@@ -85,19 +89,17 @@ def main(log_dir):
         if current_state is RobotState.PLANNING:
             planning_attempts += 1
             env.step(None)
-            if not detected:
+            if len(detection_tool.pois) == 0:
+                logging.info("Planning with Frontiers")
                 current_plan = plan_with_frontiers(env, map)
             else: 
-                if len(detections) > 1 and check_detections_for_viewpoints(detections):
-                    point = fit_detections_to_point(detections=detections)
-                    point_in_map = map.m_to_px(point)
-                    if map.grid[int(point_in_map[0]), int(point_in_map[1])] != 0.5:
-                        current_state = RobotState.END
-                        logging.info("Arrived at Goal")
-                        logging.info("Simulation time: " + f'{sim_time}s')
-                        logging.info("Entering State: END")
-                        continue
-                current_plan = plan_detection_frontier(env, map, detections[-1])
+                logging.info("Planning with POIs")
+                robot_pos = env.robots[0].get_position()[:2]
+                closest_poi = detection_tool.closest_poi(robot_pos)
+                if map.check_if_free(closest_poi[:2]):
+                    current_plan = plan_base_motion(env.robots[0], closest_poi, map)
+                else:
+                    current_plan = plan_frontier_with_poi(env, map, closest_poi)
             if current_plan is not None:
                 current_state = RobotState.MOVING
                 logging.info("Entering State: MOVING")
@@ -114,22 +116,39 @@ def main(log_dir):
         elif current_state is RobotState.MOVING:
             current_point = current_plan.pop(0)
             teleport(env, current_point)
+            detection_tool.remove_close_pois(current_point)
             if len(current_plan) == 0:
                 current_plan = None
                 current_state = RobotState.UPDATING
                 logging.info("Current Plan Executed")
                 logging.info("Entering State: UPDATING")
                 continue
-            if detected: continue
 
-            detection, mask = get_detection(env, model, device, hyp, "dining table", True)
-            if detection is not None:
-                detected = True
-                detections.append(detection)
-                current_plan = None
-                current_state = RobotState.UPDATING
-                logging.info("First Detection Made")
-                logging.info("Entering State: UPDATING")
+            detections, masks = get_detections(env, model, device, hyp, queried_semantic, True)
+            if detections is not None:
+                state = env.get_state()
+                depth = state["depth"]
+                for detection, mask in zip(detections, masks):
+                    masked_depth = depth[:,:,0] * mask
+                    if np.count_nonzero(masked_depth) > 50:
+                        rmin, rmax, cmin, cmax = bbox(masked_depth)
+                        points = []
+                        for r in range(rmin, rmax+1):
+                            for c in range(cmin, cmax+1):
+                                d = masked_depth[r,c]
+                                if d == 0: continue
+                                point = pixel_to_point(env, r, c, d)
+                                if point[2] > 0.05: points.append(point)
+                        
+                        new_detection = detection_tool.register_definitive_detection(points)
+                        if new_detection is not None:
+                            logging.info("New Detection Located at " + f'{new_detection.position[0]:.2f}, {new_detection.position[1]:.2f}')
+                            input("enter")
+                    else:
+                        poi = get_poi(detection)
+                        new = detection_tool.register_new_poi(poi)
+                        if new:
+                            logging.info("Object Detected: New POI added")
             
 
         elif current_state is RobotState.UPDATING:
@@ -142,20 +161,8 @@ def main(log_dir):
             depth = state["depth"]
             map.update_from_depth(env, depth)
             
-            save_map(log_dir, map.grid)
+            save_map(log_dir, robot_pos, map, detection_tool)
 
-            detection, mask = get_detection(env, model, device, hyp, "dining table", True)
-            if detection is not None:
-                detected = True
-                detections.append(detection)
-                masked_depth = depth[:,:,0] * mask
-                if masked_depth.max() > 0:
-                    current_state = RobotState.END
-                    sim_time = env.simulation_time()
-                    logging.info("Arrived at Goal")
-                    logging.info("Simulation time: " + f'{sim_time}')
-                    logging.info("Entering State: END")
-                    continue
             
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
