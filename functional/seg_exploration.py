@@ -14,7 +14,7 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.utils.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import plan_with_frontiers, teleport, plan_detection_frontier
+from soph.utils.motion_planning import frontier_plan_bestinfo, teleport, frontier_plan_detection
 from soph.utils.utils import fit_detections_to_point, check_detections_for_viewpoints
 from yolo_utils import create_model, get_predictions, prepare_image, save_seg_image, get_detection
 
@@ -80,7 +80,7 @@ def main():
         if current_state is RobotState.PLANNING:
             env.step(None)
             if not detected:
-                current_plan = plan_with_frontiers(env, map)
+                current_plan = frontier_plan_bestinfo(env, map)
             else: 
                 print(detections)
                 if len(detections) > 1 and check_detections_for_viewpoints(detections):
@@ -91,7 +91,7 @@ def main():
                         current_state = RobotState.END
                         print("move to end state")
                         continue
-                current_plan = plan_detection_frontier(env, map, detections[-1])
+                current_plan = frontier_plan_detection(env, map, detections[-1])
             if current_plan is not None:
                 current_state = RobotState.MOVING
 

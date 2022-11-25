@@ -19,7 +19,7 @@ def initiate_logging(log_name):
                         ])
     return log_dir
 
-def save_map(log_dir, robot_state, map, detection_tool):
+def save_map(log_dir, robot_state, map, detection_tool, current_plan = [], frontier_line = []):
     filename = time.strftime("%H-%M-%S-map.png")
     map_cv = cv2.cvtColor(map.grid*255, cv2.COLOR_GRAY2RGB)
     robot_pos_in_map = map.m_to_px(robot_state[:2])
@@ -31,5 +31,10 @@ def save_map(log_dir, robot_state, map, detection_tool):
     for poi in detection_tool.pois:
         poi_in_map = map.m_to_px(poi[:2])
         cv2.circle(map_cv, [int(poi_in_map[1]), int(poi_in_map[0])], radius=3, color=(0, 0, 255), thickness=-1)
+    for point in current_plan:
+        point_in_map = map.m_to_px(point[:2])
+        cv2.circle(map_cv, [int(point_in_map[1]), int(point_in_map[0])], radius=1, color=(255, 0, 255), thickness=-1)
+    for point in frontier_line:
+        cv2.circle(map_cv, [int(point[1]), int(point[0])], radius=1, color=(0, 255, 255), thickness=-1)
     cv2.imwrite(os.path.join(log_dir, filename), map_cv)
     logging.info("Saved Occupancy Map as " + filename)

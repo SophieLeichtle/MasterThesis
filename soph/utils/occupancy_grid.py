@@ -3,12 +3,15 @@ import cv2
 import matplotlib.pyplot as plt
 from soph.utils.utils import pixel_to_point
 
+from igibson.utils.constants import OccupancyGridState
+from soph import DEFAULT_FOOTPRINT_RADIUS
+
 class OccupancyGrid2D:
 
     def __init__(self, half_size=250, m_to_pix= 128.0/5.0):
         self.half_size = half_size
         self.grid = np.zeros((self.half_size*2 + 1, self.half_size*2 + 1)).astype(np.float32)
-        self.grid.fill(0.5)
+        self.grid.fill(OccupancyGridState.UNKNOWN)
         self.origin = np.array([half_size, half_size])
         self.m_to_pix_ratio = m_to_pix
         self.coordinate_transform = np.array(((0, -1),(1, 0)))
@@ -18,6 +21,7 @@ class OccupancyGrid2D:
         Convert a pixel to meters. Pixel does not need to be an integer.
         """
         return np.dot(np.linalg.inv(self.coordinate_transform),(point - self.origin) / self.m_to_pix_ratio)
+    
     def m_to_px(self, position):
         """
         Convert a position in meters to pixels. Returns floating point pixel.
@@ -46,12 +50,12 @@ class OccupancyGrid2D:
         # Update Grid
         for r in range(0,grid_size):
             for c in range(0,grid_size):
-                if occupancy_grid[r][c] == 0.5:
+                if occupancy_grid[r][c] == OccupancyGridState.UNKNOWN:
                     continue
                 point = robot_pos_in_map + np.dot(R, [r-grid_size//2,c-grid_size//2])
                 for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(np.int32):
                     for y in np.floor(point[0]).astype(np.int32), np.ceil(point[0]).astype(np.int32):
-                        if self.grid[y][x] != 0:
+                        if self.grid[y][x] != OccupancyGridState.OBSTACLES:
                             self.grid[y][x] = occupancy_grid[r][c]
 
     def update_with_points(self, points):
@@ -64,8 +68,8 @@ class OccupancyGrid2D:
             point_in_map = np.dot(self.coordinate_transform, point[:2]) * self.m_to_pix_ratio + self.origin
             for x in np.floor(point_in_map[1]).astype(np.int32), np.ceil(point_in_map[1]).astype(np.int32):
                     for y in np.floor(point_in_map[0]).astype(np.int32), np.ceil(point_in_map[0]).astype(np.int32):
-                        if self.grid[y][x] != 0.5:
-                            self.grid[y][x] = 0
+                        if self.grid[y][x] != OccupancyGridState.UNKNOWN:
+                            self.grid[y][x] = OccupancyGridState.OBSTACLES
 
     def update_from_depth(self, env, depth, samplesize = 1000):
         rows = np.random.randint(depth.shape[0], size = samplesize)
@@ -80,7 +84,7 @@ class OccupancyGrid2D:
         self.update_with_points(points)
 
 
-    def check_if_free(self, position, base_radius=0.3):
+    def check_if_free(self, position, base_radius=DEFAULT_FOOTPRINT_RADIUS):
         """
         Check if a certain position is free given a robot base radius
 
@@ -89,18 +93,18 @@ class OccupancyGrid2D:
         """
         #If center point is not free can skip more intensive calculations
         robot_pos_in_map = self.m_to_px(position)
-        if self.grid[int(robot_pos_in_map[0]), int(robot_pos_in_map[1])] != 1:
+        if self.grid[int(robot_pos_in_map[0]), int(robot_pos_in_map[1])] != OccupancyGridState.FREESPACE:
             return False
 
         filter = np.zeros_like(self.grid)
         #Careful! Opencv uses different indexing so transformation is different
         robot_pos_in_map_cv = np.array([position[0], -position[1]]) * self.m_to_pix_ratio + self.origin
 
-        base_radius_in_map = int(base_radius * self.m_to_pix_ratio)
+        base_radius_in_map = int(1.1 * base_radius * self.m_to_pix_ratio)
         cv2.circle(img=filter,center=robot_pos_in_map_cv.astype(np.int32), radius=base_radius_in_map, color=1, thickness=-1)
         
         points = self.grid[filter==1]
-        return 0 not in points and 0.5 not in points
+        return OccupancyGridState.OBSTACLES not in points and OccupancyGridState.UNKNOWN not in points
 
     def check_new_information(self, position, theta, lin_range, ang_range, visualize=False):
         """
@@ -126,11 +130,18 @@ class OccupancyGrid2D:
                 point = (robot_pos_in_map + range * unit_v).astype(np.int32)
                 value = self.grid[point[0], point[1]]
                 grid_copy[point[0], point[1]] = 2
-                if value == 0: break
-                if value == 0.5: new_info+=1
+                if value == OccupancyGridState.OBSTACLES: break
+                if value == OccupancyGridState.UNKNOWN: new_info+=1
 
         if visualize:
             plt.figure()
             plt.imshow(grid_copy)
             plt.show()   
         return new_info
+
+    def line_of_sight(self, pos_in_map, goal_in_map):
+        length = 2 * np.linalg.norm(pos_in_map - goal_in_map)
+        for i in range(0, int(length) - 1):
+            point = pos_in_map * ((length - i)/length) + goal_in_map * (i / length)
+            if self.grid[int(point[0]), int(point[0])] == OccupancyGridState.OBSTACLES: return False
+        return True

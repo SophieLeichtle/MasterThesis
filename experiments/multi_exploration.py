@@ -12,7 +12,7 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.utils.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import plan_with_frontiers, teleport, get_poi, plan_base_motion, plan_frontier_with_poi
+from soph.utils.motion_planning import teleport, get_poi, frontier_plan_shortdistance, plan_with_poi
 from soph.utils.logging_utils import save_map, initiate_logging
 from soph.utils.utils import bbox, pixel_to_point
 
@@ -83,33 +83,39 @@ def main(log_dir):
 
     logging.info("Entering State: PLANNING")
     
+    verbose_planning = False
+
     planning_attempts = 0
     max_planning_attempts = 10
     while True:
         if current_state is RobotState.PLANNING:
             planning_attempts += 1
             env.step(None)
+            frontier_line = []
             if len(detection_tool.pois) == 0:
                 logging.info("Planning with Frontiers")
-                current_plan = plan_with_frontiers(env, map)
+                current_plan, frontier_line = frontier_plan_shortdistance(env, map, verbose_planning)
+                #current_plan = frontier_plan_bestinfo(env, map)
             else: 
                 logging.info("Planning with POIs")
                 robot_pos = env.robots[0].get_position()[:2]
                 closest_poi = detection_tool.closest_poi(robot_pos)
-                if map.check_if_free(closest_poi[:2]):
-                    current_plan = plan_base_motion(env.robots[0], closest_poi, map)
-                else:
-                    current_plan = plan_frontier_with_poi(env, map, closest_poi)
+                current_plan, frontier_line = plan_with_poi(env, map, closest_poi, verbose=verbose_planning)
             if current_plan is not None:
                 current_state = RobotState.MOVING
                 logging.info("Entering State: MOVING")
                 planning_attempts = 0
+                save_map(log_dir, robot_pos, map, detection_tool, current_plan, frontier_line)
             else:
                 if planning_attempts <= max_planning_attempts:
                     logging.warning("No plan found. Attempting Planning again.")
+                    logging.info("Turning on Verbose Planning")
+                    verbose_planning = True
                 else:
                     logging.warning("Max Planning Attempts reached")
                     logging.info("Entering State: End")
+                    save_map(log_dir, robot_pos, map, detection_tool)
+
                     current_state = RobotState.END
 
 
@@ -143,15 +149,20 @@ def main(log_dir):
                         new_detection = detection_tool.register_definitive_detection(points)
                         if new_detection is not None:
                             logging.info("New Detection Located at " + f'{new_detection.position[0]:.2f}, {new_detection.position[1]:.2f}')
-                            input("enter")
+                            current_plan = None
+                            current_state = RobotState.UPDATING
+                            logging.info("Current Plan Aborted")
+                            logging.info("Entering State: UPDATING")
                     else:
                         poi = get_poi(detection)
                         new = detection_tool.register_new_poi(poi)
                         if new:
-                            logging.info("Object Detected: New POI added")
+                            logging.info("Object Detected: New POI added at " + f'{poi[0]:.2f}, {poi[1]:.2f}')
             
 
         elif current_state is RobotState.UPDATING:
+            env.step(None)
+
             state = env.get_state()
             robot_pos = env.robots[0].get_position()[:2]
             robot_theta = env.robots[0].get_rpy()[2]
@@ -161,12 +172,11 @@ def main(log_dir):
             depth = state["depth"]
             map.update_from_depth(env, depth)
             
-            save_map(log_dir, robot_pos, map, detection_tool)
 
             
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
-
+            #input("enter")
 
         elif current_state is RobotState.END:
             env.step(None)

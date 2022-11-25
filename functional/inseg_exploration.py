@@ -12,7 +12,7 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.utils.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import plan_with_frontiers, teleport, plan_detection_frontier
+from soph.utils.motion_planning import frontier_plan_bestinfo, teleport, frontier_plan_detection
 from soph.utils.utils import fit_detections_to_point, check_detections_for_viewpoints
 from soph.utils.logging_utils import save_map, initiate_logging
 
@@ -86,7 +86,7 @@ def main(log_dir):
             planning_attempts += 1
             env.step(None)
             if not detected:
-                current_plan = plan_with_frontiers(env, map)
+                current_plan = frontier_plan_bestinfo(env, map)
             else: 
                 if len(detections) > 1 and check_detections_for_viewpoints(detections):
                     point = fit_detections_to_point(detections=detections)
@@ -97,7 +97,7 @@ def main(log_dir):
                         logging.info("Simulation time: " + f'{sim_time}s')
                         logging.info("Entering State: END")
                         continue
-                current_plan = plan_detection_frontier(env, map, detections[-1])
+                current_plan = frontier_plan_detection(env, map, detections[-1])
             if current_plan is not None:
                 current_state = RobotState.MOVING
                 logging.info("Entering State: MOVING")

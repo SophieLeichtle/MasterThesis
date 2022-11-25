@@ -38,7 +38,6 @@ class DetectionTool:
 
     def already_detected(self, points):
         center = np.average(np.vstack(points), axis=0)
-        print(center)
         for def_detection in self.definitive_detections:
             if def_detection.equivalent_point(center[:2]):
                 def_detection.extend(points)
