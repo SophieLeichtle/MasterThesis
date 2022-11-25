@@ -5,6 +5,8 @@ from igibson.external.pybullet_tools.utils import plan_base_motion_2d, set_base_
 import logging
 from igibson.utils.constants import OccupancyGridState
 
+import time
+
 from soph import DEFAULT_FOOTPRINT_RADIUS
 
 def plan_base_motion(
@@ -108,9 +110,9 @@ def frontier_plan_shortdistance(env, map, verbose = False):
     robot_pos = env.robots[0].get_position()[:2]
     robot_pos_in_map = map.m_to_px(robot_pos)
     frontier_lines = extract_frontiers(map.grid)
-
+    
     def frontier_center(frontier_line):
-        return (np.array(frontier_line[-1]) + np.array(frontier_line[-2]))/2
+        return (np.array(frontier_line[-1]) + np.array(frontier_line[0]))/2
     
     frontier_lines.sort(key = lambda x: np.linalg.norm(robot_pos_in_map - frontier_center(x)))
 
@@ -127,54 +129,6 @@ def frontier_plan_shortdistance(env, map, verbose = False):
                 if plan is not None: 
                     return plan, line
     return None, []
-
-
-def frontier_plan_detection(env, map, detection):
-    frontier_lines = extract_frontiers(map.grid)
-    vec = np.array([np.cos(detection[2]), np.sin(detection[2])])
-    current_plan = None
-
-    while current_plan is None and len(frontier_lines) > 0:
-        best_dist = np.inf
-        best_frontier = None
-        for line in frontier_lines:
-            if len(line) < 10: continue
-
-            min_dist = np.inf
-            for frontier_point in line:
-                frontier_point = map.px_to_m(frontier_point)
-
-                px = frontier_point[0]
-                py = frontier_point[1]
-                x0 = detection[0]
-                y0 = detection[1]
-                u0 = vec[0]
-                v0 = vec[1]
-
-                a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
-                if a < 0: continue
-                dist = (x0 + a*u0 - px) / v0
-                if np.abs(dist) < best_dist:
-                    min_dist = np.abs(dist)
-            if min_dist < best_dist:
-                best_dist = min_dist
-                best_frontier = line
-    
-        current_plan = None
-        robot_pos = env.robots[0].get_position()[:2]
-        robot_theta = env.robots[0].get_rpy()[2]  
-        samples = sample_around_frontier(best_frontier, map)
-        samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
-        for s in samples:
-            if not map.check_if_free(np.array([s[0],s[1]]), DEFAULT_FOOTPRINT_RADIUS): continue
-            s[2] = detection[2]
-            plan = plan_base_motion(env.robots[0], s, map)
-            if plan is None: continue
-            current_plan = plan
-            break
-        if current_plan is None:
-            frontier_lines.remove(best_frontier)
-    return current_plan
 
 def plan_with_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbose = False):
     poi_in_map = map.m_to_px(poi[:2])
@@ -202,8 +156,6 @@ def sample_plan_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, n=10, v
     return None
 
 def frontier_plan_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbose=False):
-    # almost identical to planning with detection but the frontier is behind instead of in front
-
     frontier_lines = extract_frontiers(map.grid)
     vec = np.array([np.cos(poi[2]), np.sin(poi[2])])
     current_plan = None
@@ -232,13 +184,14 @@ def frontier_plan_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbo
             if min_dist < best_dist:
                 best_dist = min_dist
                 best_frontier = line
-    
+   
         current_plan = None
-        robot_pos = env.robots[0].get_position()[:2]
-        robot_theta = env.robots[0].get_rpy()[2]
         if verbose: logging.info(best_frontier)  
+
+        center = (np.array(best_frontier[-1]) + np.array(best_frontier[0]))/2
+
         samples = sample_around_frontier(best_frontier, map)
-        samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
+        samples.sort(key=lambda x: np.linalg.norm([center[0] - x[0], center[1] - x[1]]))
         for s in samples:
             if not map.check_if_free(np.array([s[0],s[1]]), base_radius): continue
             s[2] = poi[2]
@@ -256,3 +209,53 @@ def get_poi(detection, max_depth = 2):
     position = np.array([detection[0], detection[1]])
     new_pos = position + max_depth * unitv
     return np.array([new_pos[0],new_pos[1],detection[2]])
+
+
+# deprecated
+
+# def frontier_plan_detection(env, map, detection):
+#     frontier_lines = extract_frontiers(map.grid)
+#     vec = np.array([np.cos(detection[2]), np.sin(detection[2])])
+#     current_plan = None
+
+#     while current_plan is None and len(frontier_lines) > 0:
+#         best_dist = np.inf
+#         best_frontier = None
+#         for line in frontier_lines:
+#             if len(line) < 10: continue
+
+#             min_dist = np.inf
+#             for frontier_point in line:
+#                 frontier_point = map.px_to_m(frontier_point)
+
+#                 px = frontier_point[0]
+#                 py = frontier_point[1]
+#                 x0 = detection[0]
+#                 y0 = detection[1]
+#                 u0 = vec[0]
+#                 v0 = vec[1]
+
+#                 a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
+#                 if a < 0: continue
+#                 dist = (x0 + a*u0 - px) / v0
+#                 if np.abs(dist) < best_dist:
+#                     min_dist = np.abs(dist)
+#             if min_dist < best_dist:
+#                 best_dist = min_dist
+#                 best_frontier = line
+    
+#         current_plan = None
+#         robot_pos = env.robots[0].get_position()[:2]
+#         robot_theta = env.robots[0].get_rpy()[2]  
+#         samples = sample_around_frontier(best_frontier, map)
+#         samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
+#         for s in samples:
+#             if not map.check_if_free(np.array([s[0],s[1]]), DEFAULT_FOOTPRINT_RADIUS): continue
+#             s[2] = detection[2]
+#             plan = plan_base_motion(env.robots[0], s, map)
+#             if plan is None: continue
+#             current_plan = plan
+#             break
+#         if current_plan is None:
+#             frontier_lines.remove(best_frontier)
+#     return current_plan

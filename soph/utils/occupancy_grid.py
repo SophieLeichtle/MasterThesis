@@ -53,6 +53,10 @@ class OccupancyGrid2D:
                 if occupancy_grid[r][c] == OccupancyGridState.UNKNOWN:
                     continue
                 point = robot_pos_in_map + np.dot(R, [r-grid_size//2,c-grid_size//2])
+                if occupancy_grid[r][c] == OccupancyGridState.OBSTACLES:
+                    rounded_point = [int(round(point[0])), int(round(point[1]))]
+                    self.grid[rounded_point[0], rounded_point[1]] = occupancy_grid[r][c]
+                    continue
                 for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(np.int32):
                     for y in np.floor(point[0]).astype(np.int32), np.ceil(point[0]).astype(np.int32):
                         if self.grid[y][x] != OccupancyGridState.OBSTACLES:
@@ -79,7 +83,7 @@ class OccupancyGrid2D:
             d = depth[rows[it], columns[it],0]
             if d == 0 : continue
             p = pixel_to_point(env, rows[it], columns[it], d)
-            if p[2] > 0.05:
+            if p[2] > 0.1:
                 points.append(p)
         self.update_with_points(points)
 
