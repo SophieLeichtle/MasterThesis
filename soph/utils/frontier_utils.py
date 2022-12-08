@@ -5,7 +5,7 @@ from soph.utils.utils import bbox
 from soph import DEFAULT_FOOTPRINT_RADIUS
 from igibson.utils.constants import OccupancyGridState
 
-def extract_frontiers(map_2d):
+def extract_frontiers(map_2d, map_2d_old=None, refine = True):
     """
     Extract frontiers from the occupancy map. 
     A frontier is a transition from explored free space to unexplored space
@@ -19,6 +19,8 @@ def extract_frontiers(map_2d):
     eroded_map = binary_erosion(known_map)
     outline = known_map ^ eroded_map
     filtered = outline & (map_2d == OccupancyGridState.FREESPACE)
+    if map_2d_old is not None:
+        filtered = filtered & (map_2d_old == OccupancyGridState.UNKNOWN)
 
     lines = []
     while filtered.any():
@@ -51,7 +53,7 @@ def extract_frontiers(map_2d):
                         indexes = [i, j]
                         max_dist = dist
             start1 = new_fields.pop(indexes[0])
-            start2 = new_fields.pop(indexes[1])
+            start2 = new_fields.pop(indexes[1]-1)
             line.extend(new_fields)
         elif len(new_fields) == 2:
             start1 = new_fields[0]
@@ -86,9 +88,11 @@ def extract_frontiers(map_2d):
                                 filtered[x,y] = 0
                                 next_new_fields.append([x,y])
                 new_fields = sorted(next_new_fields, key=lambda x: np.linalg.norm(np.array(line[0]) - np.array(x)), reverse=True)
-        
-        refined = refine_frontier(line)
-        lines.extend(refined)
+        if refine:
+            refined = refine_frontier(line)
+            lines.extend(refined)
+        else:
+            lines.append(line)
     return lines
 
 def refine_frontier(frontier_line, threshold = 10):
@@ -182,6 +186,45 @@ def point_to_line_dist(p, line_origin, unit_v):
     dist = (x0 + a*u0 - px) / v0
     return dist
 
+def distance_to_frontier(frontier_line, robot_pos, nav_graph, map, simplified = False):
+    robot_pos_in_map = map.m_to_px(robot_pos)
+    frontier_center_in_map = (np.array(frontier_line[0]) + np.array(frontier_line[-1]))/2
+    frontier_center = map.px_to_m(frontier_center_in_map)
+    # Visible from Robot Position?
+
+    dist_robot = np.linalg.norm(robot_pos - frontier_center)
+    if map.line_of_sight(robot_pos_in_map, frontier_center_in_map):    
+        return dist_robot, None
+    
+    # Visible from some Node?
+    closest_visible_node = nav_graph.get_closest_node(frontier_center, map)
+    if closest_visible_node is not None and closest_visible_node is not nav_graph.root:
+        dist_node = closest_visible_node.get_cost() + np.linalg.norm(closest_visible_node.position - frontier_center)
+
+        if simplified:
+            return dist_node, closest_visible_node
+
+        frontier_v = map.px_to_m(np.array(frontier_line[0])) - map.px_to_m(np.array(frontier_line[-1]))
+        frontier_v = frontier_v / np.linalg.norm(frontier_v)
+        frontier_v = np.array([frontier_v[1], -frontier_v[0]])
+
+        # Check if Projection onto Orthogonal Vector to Frontier have opposite signs
+        # Basically, are the Node and the Robot on the same side of the frontier
+        if np.dot(frontier_v, robot_pos - frontier_center) * np.dot(frontier_v, closest_visible_node.position - frontier_center) < 0:
+            return dist_node, closest_visible_node
+
+        # Check if Node Closer To Frontier than Robot Position
+        if  np.linalg.norm(closest_visible_node.position - frontier_center) < dist_robot:
+            return dist_node, closest_visible_node
+        else:
+            return dist_robot, None
+    
+    # Not Visible from Anywhere
+    closest_node_direct = nav_graph.get_closest_node(frontier_center)
+    dist_direct = closest_node_direct.get_cost() + np.linalg.norm(closest_node_direct.position - frontier_center)
+    if dist_direct < dist_robot and closest_node_direct is not nav_graph.root:
+        return dist_direct, closest_node_direct
+    return dist_robot, None
 
 #deprecated
 

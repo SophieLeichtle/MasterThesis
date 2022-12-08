@@ -147,5 +147,11 @@ class OccupancyGrid2D:
         length = 2 * np.linalg.norm(pos_in_map - goal_in_map)
         for i in range(0, int(length) - 1):
             point = pos_in_map * ((length - i)/length) + goal_in_map * (i / length)
-            if self.grid[int(point[0]), int(point[0])] == OccupancyGridState.OBSTACLES: return False
+            if self.grid[int(point[0]), int(point[1])] == OccupancyGridState.OBSTACLES: return False
         return True
+
+    def line_of_sight_line(self, pos_in_map, line):
+        for point in line:
+            los = self.line_of_sight(pos_in_map, point)
+            if los: return True
+        return False

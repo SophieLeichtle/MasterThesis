@@ -1,5 +1,5 @@
 from soph.utils.utils import bbox
-from soph.utils.frontier_utils import extract_frontiers, sample_around_frontier
+from soph.utils.frontier_utils import extract_frontiers, sample_around_frontier, distance_to_frontier
 import numpy as np
 from igibson.external.pybullet_tools.utils import plan_base_motion_2d, set_base_values_with_z
 import logging
@@ -8,6 +8,7 @@ from igibson.utils.constants import OccupancyGridState
 import time
 
 from soph import DEFAULT_FOOTPRINT_RADIUS
+from soph.utils.plan_base_2d_custom import plan_base_motion_custom
 
 def plan_base_motion(
     robot,
@@ -40,7 +41,7 @@ def plan_base_motion(
     robot_footprint_radius_in_map = int(robot_footprint_radius / occupancy_range * grid_resolution)
 
     def pos_to_map(pos):
-        return map.m_to_px(pos).astype(np.int32)
+        return np.around(map.m_to_px(pos)).astype(np.int32)
 
     path = plan_base_motion_2d(
         robot.get_body_ids()[0],
@@ -130,6 +131,54 @@ def frontier_plan_shortdistance(env, map, verbose = False):
                     return plan, line
     return None, []
 
+def frontier_plan_with_nav(env, map, nav_graph):
+    robot_pos = env.robots[0].get_position()[:2]
+    robot_theta = env.robots[0].get_rpy()[2]
+
+    frontier_lines = extract_frontiers(map.grid)
+    frontiers = []
+
+    for frontier in frontier_lines:
+        if len(frontier) < 10: continue
+        dist, node = distance_to_frontier(frontier, robot_pos, nav_graph, map)
+        frontiers.append((frontier, dist, node))
+    
+    frontiers.sort(key = lambda x: x[1])
+
+    for frontier, dist, node in frontiers:
+        print(frontier)
+        print(dist)
+        if node is None:
+            plan = plan_to_frontier([robot_pos[0], robot_pos[1], robot_theta], map, frontier)
+            if plan is not None:
+                return [], plan, frontier
+        else:
+            waypoints = node.get_path()
+            print(len(waypoints))
+            for waypoint in waypoints:
+                print (waypoint.position)
+            if len(waypoints) < 2:
+                current_point = robot_pos
+            else:
+                current_point = waypoints[-2].position
+            next_point = waypoints[-1].position
+            theta = np.arctan2(next_point[1]-current_point[1], next_point[0]-current_point[0])
+            plan = plan_to_frontier([next_point[0], next_point[1], theta], map, frontier)
+            if plan is not None:
+                return waypoints, plan, frontier
+    return None, None, []
+
+def plan_to_frontier(start_config, map, frontier):
+    samples = sample_around_frontier(frontier, map)
+    center = map.px_to_m((np.array(frontier[0]) + np.array(frontier[-1]))/2)
+    samples.sort(key=lambda x: np.linalg.norm(center - x[:2]))
+    for s in samples:
+        if not map.check_if_free(np.array([s[0], s[1]]), DEFAULT_FOOTPRINT_RADIUS): continue
+        plan = plan_base_motion_custom(start_config, s, map)
+        if plan is not None:
+            return plan
+    return None
+
 def plan_with_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbose = False):
     poi_in_map = map.m_to_px(poi[:2])
     if map.grid[int(poi_in_map[0]), int(poi_in_map[1])] == OccupancyGridState.UNKNOWN:
@@ -177,7 +226,6 @@ def frontier_plan_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbo
                 v0 = vec[1]
 
                 a = ((px + v0 * py / u0) - (x0 + v0 * y0 / u0))/(u0 + v0 * v0 / u0)
-                if a > 0: continue
                 dist = (x0 + a*u0 - px) / v0
                 if np.abs(dist) < best_dist:
                     min_dist = np.abs(dist)

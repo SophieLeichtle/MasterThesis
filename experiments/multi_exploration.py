@@ -12,9 +12,15 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.utils.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import teleport, get_poi, frontier_plan_shortdistance, plan_with_poi
-from soph.utils.logging_utils import save_map, initiate_logging
+from soph.utils.motion_planning import teleport, get_poi, frontier_plan_shortdistance, plan_with_poi, plan_base_motion, frontier_plan_with_nav
+from soph.utils.logging_utils import save_map, initiate_logging, save_nav_map, save_map_combo
 from soph.utils.utils import bbox, pixel_to_point
+from soph.utils.nav_graph import NavGraph
+from soph.utils.frontier_utils import extract_frontiers, sample_around_frontier
+
+from soph import DEFAULT_FOOTPRINT_RADIUS
+
+from igibson.utils.constants import OccupancyGridState
 
 from soph.utils.detection_tool import DetectionTool, DefinitiveDetection
 
@@ -73,9 +79,9 @@ def main(log_dir):
         depth = state["depth"]
         map.update_from_depth(env, depth)
 
-    current_state = RobotState.PLANNING
+    navigation_graph = NavGraph(np.array(robot_pos))
 
-    
+    current_state = RobotState.PLANNING
 
     detection_tool = DetectionTool()
 
@@ -87,25 +93,45 @@ def main(log_dir):
 
     planning_attempts = 0
     max_planning_attempts = 10
+
+    waypoints = None
+    current_frontier = None
+    frontier_plan = None
+
     while True:
         if current_state is RobotState.PLANNING:
-            planning_attempts += 1
+            planning_attempts+=1
             env.step(None)
-            frontier_line = []
+            robot_pos = env.robots[0].get_position()[:2]
+            
             if len(detection_tool.pois) == 0:
-                logging.info("Planning with Frontiers")
-                current_plan, frontier_line = frontier_plan_shortdistance(env, map, verbose_planning)
-                #current_plan = frontier_plan_bestinfo(env, map)
-            else: 
+                if waypoints is None:
+                    logging.info("Planning With Frontiers")
+                    current_plan = None
+                    waypoints, frontier_plan, current_frontier = frontier_plan_with_nav(env, map, navigation_graph)
+
+                if waypoints is not None:
+                    if len(waypoints) == 0:
+                        logging.info("Final Waypoint Reached, Moving To Frontier")
+                        current_plan = frontier_plan
+                        frontier_plan = None
+                        waypoints = None
+                    else:
+                        logging.info("Planning to Next Waypoint")
+                        next_point = waypoints[0].position
+                        theta = np.arctan2(next_point[1]-robot_pos[1], next_point[0]-robot_pos[0])
+                        current_plan = plan_base_motion(env.robots[0], [next_point[0], next_point[1], theta], map) 
+            else:
                 logging.info("Planning with POIs")
-                robot_pos = env.robots[0].get_position()[:2]
                 closest_poi = detection_tool.closest_poi(robot_pos)
-                current_plan, frontier_line = plan_with_poi(env, map, closest_poi, verbose=verbose_planning)
+                current_plan, current_frontier = plan_with_poi(env, map, closest_poi, verbose=verbose_planning)
+                waypoints = None
             if current_plan is not None:
+                planning_attempts = 0
                 current_state = RobotState.MOVING
                 logging.info("Entering State: MOVING")
-                planning_attempts = 0
-                save_map(log_dir, robot_pos, map, detection_tool, current_plan, frontier_line)
+                save_map(log_dir, robot_pos, map, detection_tool, current_plan, current_frontier)
+                save_map_combo(log_dir, robot_pos, map, detection_tool, navigation_graph, current_plan, current_frontier)
             else:
                 if planning_attempts <= max_planning_attempts:
                     logging.warning("No plan found. Attempting Planning again.")
@@ -114,22 +140,31 @@ def main(log_dir):
                 else:
                     logging.warning("Max Planning Attempts reached")
                     logging.info("Entering State: End")
-                    save_map(log_dir, robot_pos, map, detection_tool)
+                    save_map(log_dir, robot_pos, map, detection_tool, frontier_line=current_frontier)
+                    save_nav_map(log_dir, map, navigation_graph)
+                    save_map_combo(log_dir, robot_pos, map, detection_tool, navigation_graph)
 
                     current_state = RobotState.END
-
 
         elif current_state is RobotState.MOVING:
             current_point = current_plan.pop(0)
             teleport(env, current_point)
             detection_tool.remove_close_pois(current_point)
+            
+            robot_pos = env.robots[0].get_position()[:2]
+
+            navigation_graph.update_with_robot_pos(robot_pos, map, 1.5)
             if len(current_plan) == 0:
                 current_plan = None
-                current_state = RobotState.UPDATING
-                logging.info("Current Plan Executed")
-                logging.info("Entering State: UPDATING")
+                if waypoints is None:
+                    current_state = RobotState.UPDATING
+                    logging.info("Current Plan Executed")
+                    logging.info("Entering State: UPDATING")
+                else:
+                    current_waypoint = waypoints.pop(0)
+                    navigation_graph.move_root(current_waypoint)
+                    current_state = RobotState.PLANNING
                 continue
-
             detections, masks = get_detections(env, model, device, hyp, queried_semantic, True)
             if detections is not None:
                 state = env.get_state()
@@ -150,6 +185,7 @@ def main(log_dir):
                         if new_detection is not None:
                             logging.info("New Detection Located at " + f'{new_detection.position[0]:.2f}, {new_detection.position[1]:.2f}')
                             current_plan = None
+                            waypoints = None
                             current_state = RobotState.UPDATING
                             logging.info("Current Plan Aborted")
                             logging.info("Entering State: UPDATING")
@@ -171,9 +207,10 @@ def main(log_dir):
             #Sample points from depth sensor to accompany lidar occupancy grid
             depth = state["depth"]
             map.update_from_depth(env, depth)
-            
 
-            
+            navigation_graph.update_with_robot_pos(robot_pos, map)
+            save_nav_map(log_dir, map, navigation_graph)
+
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
             #input("enter")

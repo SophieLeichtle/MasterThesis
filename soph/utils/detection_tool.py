@@ -38,9 +38,12 @@ class DetectionTool:
 
     def already_detected(self, points):
         center = np.average(np.vstack(points), axis=0)
+        print(center)
         for def_detection in self.definitive_detections:
             if def_detection.equivalent_point(center[:2]):
-                def_detection.extend(points)
+                #def_detection.extend(points)
+                return True
+            if def_detection.contains(points):
                 return True
         return False
 
@@ -55,7 +58,7 @@ class DetectionTool:
         return closest
 
 class DefinitiveDetection:
-    def __init__(self, points, similarity_threshold = 0.25):
+    def __init__(self, points, similarity_threshold = 0.5):
         self.low_res_point_cloud = PointCloudDict(1, 2)
         self.extend(points)
         self.similarity_threshold = similarity_threshold
@@ -69,7 +72,7 @@ class DefinitiveDetection:
     def contains(self, points):
         for point in points:
             if self.low_res_point_cloud.contains(point):
-                self.extend(points)
+                #self.extend(points)
                 return True
         return False
 
