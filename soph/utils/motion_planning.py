@@ -265,9 +265,11 @@ def sample_plan_poi(
     if verbose:
         logging.info(poi)
     if map.check_if_free(poi[:2], base_radius):
-        return plan_base_motion(
+        plan = plan_base_motion(
             env.robots[0], poi, map, robot_footprint_radius=base_radius
         )
+        if plan is not None:
+            return plan
 
     r_samples = np.random.uniform(-1, 1, n)
     c_samples = np.random.uniform(-1, 1, n)

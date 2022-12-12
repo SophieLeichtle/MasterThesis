@@ -2,7 +2,7 @@ import logging
 import os
 import cv2
 import time
-from soph import logs_path
+from soph import logs_path, DEFAULT_FOOTPRINT_RADIUS
 
 
 def initiate_logging(log_name):
@@ -25,7 +25,7 @@ def save_map(
     filename = time.strftime("%H-%M-%S-map.png")
     map_cv = cv2.cvtColor(map.grid * 255, cv2.COLOR_GRAY2RGB)
     robot_pos_in_map = map.m_to_px(robot_state[:2])
-    base_radius_in_map = int(0.3 * map.m_to_pix_ratio)
+    base_radius_in_map = int(DEFAULT_FOOTPRINT_RADIUS * map.m_to_pix_ratio)
     cv2.circle(
         map_cv,
         [int(robot_pos_in_map[1]), int(robot_pos_in_map[0])],
@@ -116,7 +116,7 @@ def save_map_combo(
     filename = time.strftime("%H-%M-%S-combo.png")
     map_cv = cv2.cvtColor(map.grid * 255, cv2.COLOR_GRAY2RGB)
     robot_pos_in_map = map.m_to_px(robot_state[:2])
-    base_radius_in_map = int(0.3 * map.m_to_pix_ratio)
+    base_radius_in_map = int(DEFAULT_FOOTPRINT_RADIUS * map.m_to_pix_ratio)
     # Robot Base: Blue
     cv2.circle(
         map_cv,

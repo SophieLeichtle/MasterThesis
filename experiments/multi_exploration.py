@@ -16,6 +16,7 @@ from soph.utils.motion_planning import (
     plan_with_poi,
     plan_base_motion,
     frontier_plan_with_nav,
+    sample_plan_poi,
 )
 from soph.utils.logging_utils import (
     save_map,
@@ -89,7 +90,7 @@ def main(log_dir):
 
         # Sample points from depth sensor to accompany lidar occupancy grid
         depth = state["depth"]
-        occupancy_map.update_from_depth(env, depth)
+        occupancy_map.update_from_depth(env, depth, 5000)
 
     navigation_graph = NavGraph(np.array(robot_pos))
 
@@ -136,11 +137,12 @@ def main(log_dir):
                         theta = np.arctan2(
                             next_point[1] - robot_pos[1], next_point[0] - robot_pos[0]
                         )
-                        current_plan = plan_base_motion(
-                            env.robots[0],
-                            [next_point[0], next_point[1], theta],
+                        current_plan = sample_plan_poi(
+                            env,
                             occupancy_map,
+                            np.array([next_point[0], next_point[1], theta]),
                         )
+
             else:
                 logging.info("Planning with POIs")
                 closest_poi = detection_tool.closest_poi(robot_pos)
@@ -273,6 +275,25 @@ def main(log_dir):
             # Sample points from depth sensor to accompany lidar occupancy grid
             depth = state["depth"]
             occupancy_map.update_from_depth(env, depth)
+
+            for i in range(10):
+                new_robot_theta = robot_theta + 0.2 * np.pi
+                plan = [robot_pos[0], robot_pos[1], new_robot_theta]
+                teleport(env, plan)
+
+                state = env.get_state()
+                robot_pos = env.robots[0].get_position()[:2]
+                robot_theta = env.robots[0].get_rpy()[2]
+
+                occupancy_map.update_with_grid(
+                    occupancy_grid=state["occupancy_grid"],
+                    position=robot_pos,
+                    theta=robot_theta,
+                )
+
+                # Sample points from depth sensor to accompany lidar occupancy grid
+                depth = state["depth"]
+                occupancy_map.update_from_depth(env, depth, 5000)
 
             navigation_graph.update_with_robot_pos(robot_pos, occupancy_map)
             save_nav_map(log_dir, occupancy_map, navigation_graph)

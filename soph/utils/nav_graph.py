@@ -131,7 +131,7 @@ class NavGraph:
             current_cost += cost
             total_cost -= cost
 
-    def update_with_robot_pos(self, robot_pos, map, min_dist=1.0):
+    def update_with_robot_pos(self, robot_pos, map, min_dist=1):
         """
         Update the graph with a new robot position.
         If the current root is the closest to the new position, a new node is added and root is moved.
