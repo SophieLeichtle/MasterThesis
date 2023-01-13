@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from soph.utils.utils import pixel_to_point
+from scipy.ndimage import binary_erosion, binary_dilation
 
 from igibson.utils.constants import OccupancyGridState
 from soph import DEFAULT_FOOTPRINT_RADIUS
@@ -17,6 +18,9 @@ class OccupancyGrid2D:
         self.origin = np.array([half_size, half_size])
         self.m_to_pix_ratio = m_to_pix
         self.coordinate_transform = np.array(((0, -1), (1, 0)))
+
+        self.pure_grid = self.grid.copy()
+        self.depth_grid = self.grid.copy()
 
     def px_to_m(self, point):
         """
@@ -66,6 +70,39 @@ class OccupancyGrid2D:
                 if occupancy_grid[r][c] == OccupancyGridState.OBSTACLES:
                     rounded_point = [int(round(point[0])), int(round(point[1]))]
                     self.grid[rounded_point[0], rounded_point[1]] = occupancy_grid[r][c]
+                    self.pure_grid[rounded_point[0], rounded_point[1]] = occupancy_grid[
+                        r
+                    ][c]
+                    continue
+                for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(
+                    np.int32
+                ):
+                    for y in np.floor(point[0]).astype(np.int32), np.ceil(
+                        point[0]
+                    ).astype(np.int32):
+                        if self.grid[y][x] != OccupancyGridState.OBSTACLES:
+                            self.grid[y][x] = occupancy_grid[r][c]
+                        if self.pure_grid[y][x] != OccupancyGridState.OBSTACLES:
+                            self.pure_grid[y][x] = occupancy_grid[r][c]
+
+    def update_with_grid_direct(self, occupancy_grid, position):
+        robot_pos_in_map = self.m_to_px(position)
+
+        # Input Grid must be square
+        assert occupancy_grid.shape[0] == occupancy_grid.shape[1]
+        grid_size = occupancy_grid.shape[0]
+
+        for r in range(0, grid_size):
+            for c in range(0, grid_size):
+                if occupancy_grid[r][c] == OccupancyGridState.UNKNOWN:
+                    continue
+                point = robot_pos_in_map + np.array(
+                    [r - grid_size // 2, c - grid_size // 2]
+                )
+
+                if occupancy_grid[r][c] == OccupancyGridState.OBSTACLES:
+                    rounded_point = [int(round(point[0])), int(round(point[1]))]
+                    self.grid[rounded_point[0], rounded_point[1]] = occupancy_grid[r][c]
                     continue
                 for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(
                     np.int32
@@ -90,6 +127,9 @@ class OccupancyGrid2D:
                 != OccupancyGridState.UNKNOWN
             ):
                 self.grid[
+                    rounded_point[0], rounded_point[1]
+                ] = OccupancyGridState.OBSTACLES
+                self.depth_grid[
                     rounded_point[0], rounded_point[1]
                 ] = OccupancyGridState.OBSTACLES
 
@@ -207,3 +247,19 @@ class OccupancyGrid2D:
             if los:
                 return True
         return False
+
+    def refined_map(self):
+        occupied = self.pure_grid == OccupancyGridState.OBSTACLES
+        occupied_refined = binary_dilation(binary_erosion(occupied))
+
+        free = self.grid == OccupancyGridState.FREESPACE
+        free_refined = binary_erosion(binary_dilation(free))
+
+        refined_map = np.zeros((self.half_size * 2 + 1, self.half_size * 2 + 1)).astype(
+            np.float32
+        )
+        refined_map.fill(OccupancyGridState.UNKNOWN)
+        refined_map[free_refined == 1] = OccupancyGridState.FREESPACE
+        refined_map[occupied_refined == 1] = OccupancyGridState.OBSTACLES
+        refined_map[self.depth_grid == 0] = OccupancyGridState.OBSTACLES
+        return refined_map

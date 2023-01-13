@@ -196,8 +196,7 @@ def frontier_plan_with_nav(env, map, nav_graph):
     frontiers.sort(key=lambda x: x[1])
 
     for frontier, dist, node in frontiers:
-        print(frontier)
-        print(dist)
+
         if node is None:
             plan = plan_to_frontier(
                 [robot_pos[0], robot_pos[1], robot_theta], map, frontier
@@ -206,9 +205,6 @@ def frontier_plan_with_nav(env, map, nav_graph):
                 return [], plan, frontier
         else:
             waypoints = node.get_path()
-            print(len(waypoints))
-            for waypoint in waypoints:
-                print(waypoint.position)
             if len(waypoints) < 2:
                 current_point = robot_pos
             else:

@@ -3,6 +3,10 @@ import logging
 from enum import IntEnum
 import yaml
 import numpy as np
+import cv2
+
+from scipy.ndimage import binary_erosion, binary_dilation
+from soph.utils.occupancy_from_scan import get_local_occupancy_grid
 
 from yolo_mask_utils import create_model, get_detections
 
@@ -24,11 +28,12 @@ from soph.utils.logging_utils import (
     save_nav_map,
     save_map_combo,
 )
-from soph.utils.utils import bbox, pixel_to_point
+from soph.utils.utils import bbox, px_to_3d, openglf_to_wf
 from soph.utils.nav_graph import NavGraph
 
 
 from soph.utils.detection_tool import DetectionTool
+from soph import DEFAULT_FOOTPRINT_RADIUS
 
 
 class RobotState(IntEnum):
@@ -64,13 +69,13 @@ def main(log_dir):
 
     logging.info("Entering State: INIT")
 
+    detection_tool = DetectionTool()
+
     # Initial Map Update
     state = env.get_state()
     robot_pos = env.robots[0].get_position()[:2]
     robot_theta = env.robots[0].get_rpy()[2]
-    occupancy_map.update_with_grid(
-        occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta
-    )
+
     current_state = RobotState.INIT
     # Init done outside loop for now
     for i in range(10):
@@ -82,10 +87,12 @@ def main(log_dir):
         robot_pos = env.robots[0].get_position()[:2]
         robot_theta = env.robots[0].get_rpy()[2]
 
-        occupancy_map.update_with_grid(
-            occupancy_grid=state["occupancy_grid"],
+        scan_grid = get_local_occupancy_grid(
+            env, state["scan"], 128, 5.0, DEFAULT_FOOTPRINT_RADIUS
+        )
+        occupancy_map.update_with_grid_direct(
+            occupancy_grid=scan_grid,
             position=robot_pos,
-            theta=robot_theta,
         )
 
         # Sample points from depth sensor to accompany lidar occupancy grid
@@ -96,10 +103,7 @@ def main(log_dir):
 
     current_state = RobotState.PLANNING
 
-    detection_tool = DetectionTool()
-
     save_map(log_dir, robot_pos, occupancy_map, detection_tool)
-
     logging.info("Entering State: PLANNING")
 
     verbose_planning = False
@@ -227,12 +231,15 @@ def main(log_dir):
                     if np.count_nonzero(masked_depth) > 50:
                         rmin, rmax, cmin, cmax = bbox(masked_depth)
                         points = []
+                        t_mat = openglf_to_wf(env.robots[0])
                         for row in range(rmin, rmax + 1):
                             for col in range(cmin, cmax + 1):
                                 d = masked_depth[row, col]
                                 if d == 0:
                                     continue
-                                point = pixel_to_point(env, row, col, d)
+                                point = px_to_3d(
+                                    row, col, d, t_mat, env.config["depth_high"]
+                                )
                                 if point[2] > 0.05:
                                     points.append(point)
 
@@ -285,10 +292,12 @@ def main(log_dir):
                 robot_pos = env.robots[0].get_position()[:2]
                 robot_theta = env.robots[0].get_rpy()[2]
 
-                occupancy_map.update_with_grid(
-                    occupancy_grid=state["occupancy_grid"],
+                scan_grid = get_local_occupancy_grid(
+                    env, state["scan"], 128, 5.0, DEFAULT_FOOTPRINT_RADIUS
+                )
+                occupancy_map.update_with_grid_direct(
+                    occupancy_grid=scan_grid,
                     position=robot_pos,
-                    theta=robot_theta,
                 )
 
                 # Sample points from depth sensor to accompany lidar occupancy grid

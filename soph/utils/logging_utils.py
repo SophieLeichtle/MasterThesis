@@ -6,9 +6,11 @@ from soph import logs_path, DEFAULT_FOOTPRINT_RADIUS
 
 
 def initiate_logging(log_name):
-    timestr = time.strftime("%Y-%m-%d-%H-%M")
-    log_dir = os.path.join(logs_path, timestr)
-    os.mkdir(log_dir)
+    datestr = time.strftime("%Y-%m-%d")
+    timestr = time.strftime("%H-%M-%S")
+    log_dir = os.path.join(logs_path, datestr, timestr)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
     filename = os.path.join(log_dir, log_name)
     logging.root.handlers = []
     logging.basicConfig(
