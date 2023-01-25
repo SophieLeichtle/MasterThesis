@@ -8,6 +8,7 @@ import numpy as np
 from igibson.external.pybullet_tools.utils import (
     plan_base_motion_2d,
     set_base_values_with_z,
+    set_base_values,
 )
 import logging
 from igibson.utils.constants import OccupancyGridState
@@ -77,9 +78,7 @@ def plan_base_motion(
 
 
 def teleport(env, point):
-    set_base_values_with_z(
-        env.robots[0].get_body_ids()[0], point, z=env.initial_pos_z_offset
-    )
+    set_base_values(env.robots[0].get_body_ids()[0], point)
     env.simulator.step()
 
 

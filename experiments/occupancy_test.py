@@ -16,7 +16,7 @@ from igibson.render.profiler import Profiler
 from igibson.utils.motion_planning_wrapper import MotionPlanningWrapper
 from igibson.render.mesh_renderer.mesh_renderer_settings import MeshRendererSettings
 
-from soph.utils.occupancy_grid import OccupancyGrid2D
+from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 from soph.utils.simple_pi import SimplePI
 from soph.environments.custom_env import CustomEnv
 from soph.utils.utils import pixel_to_point
@@ -24,10 +24,12 @@ from soph import configs_path
 
 from soph.utils.motion_planning import plan_base_motion
 
+
 class RobotState(IntEnum):
     PLANNING = 0
     MOVING = 1
     END = 2
+
 
 def main(selection="user", headless=False, short_exec=False):
     """
@@ -43,10 +45,8 @@ def main(selection="user", headless=False, short_exec=False):
     config_data["enable_shadow"] = True
     config_data["enable_pbr"] = True
 
-
-    #rendering_settings = MeshRendererSettings(optimized=False)
+    # rendering_settings = MeshRendererSettings(optimized=False)
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
-
 
     max_iterations = 1 if not short_exec else 1
     for j in range(max_iterations):
@@ -59,7 +59,7 @@ def main(selection="user", headless=False, short_exec=False):
 
         rstate = RobotState.PLANNING
         current_plan = None
-        pi_controller = SimplePI(.5, 0, env.action_timestep)
+        pi_controller = SimplePI(0.5, 0, env.action_timestep)
 
         action = None
         motion_planner = MotionPlanningWrapper(env, visualize_2d_result=False)
@@ -70,21 +70,26 @@ def main(selection="user", headless=False, short_exec=False):
             new_robot_theta = env.robots[0].get_rpy()[2]
             if rstate is RobotState.PLANNING:
 
-                #Sample points from depth sensor to accompany lidar occupancy grid
+                # Sample points from depth sensor to accompany lidar occupancy grid
                 depth = state["depth"]
                 samplesize = 1000
-                rows = np.random.randint(depth.shape[0], size = samplesize)
-                columns = np.random.randint(depth.shape[0], size = samplesize)
+                rows = np.random.randint(depth.shape[0], size=samplesize)
+                columns = np.random.randint(depth.shape[0], size=samplesize)
                 points = []
                 for it in range(0, samplesize):
-                    d = depth[rows[it], columns[it],0]
-                    if d == 0 : continue
+                    d = depth[rows[it], columns[it], 0]
+                    if d == 0:
+                        continue
                     p = pixel_to_point(env, rows[it], columns[it], d)
                     if p[2] > 0.05:
                         points.append(p)
-                        
-                #Update Grid
-                grid.update_with_grid(occupancy_grid=state["occupancy_grid"], position=new_robot_pos, theta=new_robot_theta)
+
+                # Update Grid
+                grid.update_with_grid(
+                    occupancy_grid=state["occupancy_grid"],
+                    position=new_robot_pos,
+                    theta=new_robot_theta,
+                )
                 plt.figure()
                 plt.imshow(grid.grid)
                 plt.show()
@@ -92,12 +97,12 @@ def main(selection="user", headless=False, short_exec=False):
                 grid.update_with_points(points)
                 plt.figure()
                 plt.imshow(grid.grid)
-                plt.show()   
+                plt.show()
 
                 iter = 0
                 current_plan = None
 
-                while(current_plan == None or current_plan == []):
+                while current_plan == None or current_plan == []:
                     if iter > 20:
                         print("max iterations reached")
                         rstate = RobotState.END
@@ -107,50 +112,62 @@ def main(selection="user", headless=False, short_exec=False):
                     best_point = None
                     best_theta = None
 
-                    #Sample Points within Range
+                    # Sample Points within Range
                     num_points = 100
                     ranges = np.random.uniform(0, 1.0, num_points)
                     angles = np.random.uniform(0, 2 * np.pi, num_points)
                     num_thetas = 10
                     thetas = np.random.uniform(-np.pi, np.pi, num_thetas)
 
-                    #Find Point with most new info
-                    for i in range(0,num_points):
+                    # Find Point with most new info
+                    for i in range(0, num_points):
                         unitv = np.array([np.cos(angles[i]), np.sin(angles[i])])
                         point = new_robot_pos + ranges[i] * unitv
-                        if not grid.check_if_free(point, 0.35): continue
+                        if not grid.check_if_free(point, 0.35):
+                            continue
                         for y in range(0, num_thetas):
-                            new_info = grid.check_new_information(point, thetas[y], 2.5, 1.5 * np.pi)
+                            new_info = grid.check_new_information(
+                                point, thetas[y], 2.5, 1.5 * np.pi
+                            )
                             if new_info > best_info:
                                 best_info = new_info
                                 best_point = point
                                 best_theta = thetas[y]
-                    if best_info == 0: continue
-                    #plan = motion_planner.plan_base_motion([best_point[0], best_point[1], best_theta])
-                    plan2 = plan_base_motion(env.robots[0], [best_point[0], best_point[1], best_theta], grid)
+                    if best_info == 0:
+                        continue
+                    # plan = motion_planner.plan_base_motion([best_point[0], best_point[1], best_theta])
+                    plan2 = plan_base_motion(
+                        env.robots[0], [best_point[0], best_point[1], best_theta], grid
+                    )
                     print(plan2)
                     current_plan = plan2
                 else:
                     goal = np.array(current_plan[0])
-                    robot_state = np.array([new_robot_pos[0], new_robot_pos[1], new_robot_theta])
+                    robot_state = np.array(
+                        [new_robot_pos[0], new_robot_pos[1], new_robot_theta]
+                    )
                     pi_controller.reset_goal(goal, robot_state)
-                
-                    #TODO replace with real movement/control
+
+                    # TODO replace with real movement/control
                     print(current_plan)
                     motion_planner.dry_run_base_plan(current_plan)
                     current_plan = None
                     print(best_info)
                     print(best_point)
                     print(best_theta)
-                    grid.check_new_information(best_point, best_theta, 2.5, 1.5*np.pi, True)
+                    grid.check_new_information(
+                        best_point, best_theta, 2.5, 1.5 * np.pi, True
+                    )
                     if best_info < 10:
                         rstate = RobotState.END
 
             if rstate is RobotState.MOVING:
                 precision = 0.01
                 goal = np.array(current_plan[0])
-                robot_state = np.array([new_robot_pos[0], new_robot_pos[1], new_robot_theta])
-                
+                robot_state = np.array(
+                    [new_robot_pos[0], new_robot_pos[1], new_robot_theta]
+                )
+
                 action = pi_controller.get_control(robot_state)
                 print(action)
                 print(goal - robot_state)
@@ -170,12 +187,17 @@ def main(selection="user", headless=False, short_exec=False):
             state, reward, done, info = env.step(None)
             new_robot_pos = env.robots[0].get_position()[:2]
             new_robot_theta = env.robots[0].get_rpy()[2]
-            grid.update_with_grid(occupancy_grid=state["occupancy_grid"], position=new_robot_pos, theta=new_robot_theta)
+            grid.update_with_grid(
+                occupancy_grid=state["occupancy_grid"],
+                position=new_robot_pos,
+                theta=new_robot_theta,
+            )
             plt.figure()
             plt.imshow(grid.grid)
-            plt.show()            
-        
+            plt.show()
+
     env.close()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

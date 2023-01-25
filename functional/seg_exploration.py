@@ -12,22 +12,34 @@ from scipy.ndimage import binary_erosion
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
-from soph.utils.occupancy_grid import OccupancyGrid2D
+from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import frontier_plan_bestinfo, teleport, frontier_plan_detection
+from soph.utils.motion_planning import (
+    frontier_plan_bestinfo,
+    teleport,
+    frontier_plan_detection,
+)
 from soph.utils.utils import fit_detections_to_point, check_detections_for_viewpoints
-from yolo_utils import create_model, get_predictions, prepare_image, save_seg_image, get_detection
+from ..yolo.yolo_utils import (
+    create_model,
+    get_predictions,
+    prepare_image,
+    save_seg_image,
+    get_detection,
+)
+
 
 class RobotState(IntEnum):
-    INIT = 0 # unused for now
+    INIT = 0  # unused for now
     PLANNING = 1
     MOVING = 2
     UPDATING = 3
     END = 4
 
+
 def main():
     """
-    Create an igibson environment. 
+    Create an igibson environment.
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
 
@@ -41,15 +53,17 @@ def main():
 
     # Create Map
     map = OccupancyGrid2D(half_size=350)
-    
+
     model, device, names, colors = create_model("experiments/yolov7.pt", 640, False)
 
     # Initial Map Update
     state = env.get_state()
     robot_pos = env.robots[0].get_position()[:2]
     robot_theta = env.robots[0].get_rpy()[2]
-    map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-    
+    map.update_with_grid(
+        occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta
+    )
+
     current_state = RobotState.INIT
     # Init done outside loop for now
     for i in range(11):
@@ -60,28 +74,30 @@ def main():
         state = env.get_state()
         robot_pos = env.robots[0].get_position()[:2]
         robot_theta = env.robots[0].get_rpy()[2]
-        
-        map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-        
-        #Sample points from depth sensor to accompany lidar occupancy grid
+
+        map.update_with_grid(
+            occupancy_grid=state["occupancy_grid"],
+            position=robot_pos,
+            theta=robot_theta,
+        )
+
+        # Sample points from depth sensor to accompany lidar occupancy grid
         depth = state["depth"]
         map.update_from_depth(env, depth)
 
     current_state = RobotState.PLANNING
-
 
     detected = False
     newest_detection = None
     detections = []
 
     while True:
-        
-        
+
         if current_state is RobotState.PLANNING:
             env.step(None)
             if not detected:
                 current_plan = frontier_plan_bestinfo(env, map)
-            else: 
+            else:
                 print(detections)
                 if len(detections) > 1 and check_detections_for_viewpoints(detections):
                     point = fit_detections_to_point(detections=detections)
@@ -102,7 +118,8 @@ def main():
                 current_plan = None
                 current_state = RobotState.UPDATING
                 continue
-            if detected: continue
+            if detected:
+                continue
 
             detection = get_detection(env, model, device, names, colors, "chair", True)
             if detection is not None:
@@ -110,15 +127,18 @@ def main():
                 detections.append(detection)
                 current_plan = None
                 current_state = RobotState.UPDATING
-            
 
         elif current_state is RobotState.UPDATING:
             state = env.get_state()
             robot_pos = env.robots[0].get_position()[:2]
             robot_theta = env.robots[0].get_rpy()[2]
-            map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-            
-            #Sample points from depth sensor to accompany lidar occupancy grid
+            map.update_with_grid(
+                occupancy_grid=state["occupancy_grid"],
+                position=robot_pos,
+                theta=robot_theta,
+            )
+
+            # Sample points from depth sensor to accompany lidar occupancy grid
             depth = state["depth"]
             map.update_from_depth(env, depth)
             current_state = RobotState.PLANNING
@@ -128,12 +148,8 @@ def main():
                 detected = True
                 detections.append(detection)
 
-
         elif current_state is RobotState.END:
             env.step(None)
-            
-
-
 
 
 if __name__ == "__main__":

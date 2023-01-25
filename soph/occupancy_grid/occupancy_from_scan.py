@@ -77,7 +77,7 @@ def get_local_occupancy_grid(
     )
 
     for i in range(1, scan_local_in_map.shape[1] - 2):
-        if scan[i, 0] >= 0.95:
+        if scan[i - 1, 0] >= 0.90:
             continue
         cv2.rectangle(
             img=occupancy_grid,
