@@ -12,21 +12,28 @@ from scipy.ndimage import binary_erosion
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
-from soph.utils.occupancy_grid import OccupancyGrid2D
+from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import dry_run_base_plan, extract_frontiers, plan_base_motion, sample_around_frontier
+from soph.utils.motion_planning import (
+    dry_run_base_plan,
+    extract_frontiers,
+    plan_base_motion,
+    sample_around_frontier,
+)
 from soph.utils.utils import pixel_to_point, bbox
 
+
 class RobotState(IntEnum):
-    INIT = 0 # unused for now
+    INIT = 0  # unused for now
     PLANNING = 1
     MOVING = 2
     UPDATING = 3
     END = 4
 
+
 def main():
     """
-    Create an igibson environment. 
+    Create an igibson environment.
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
 
@@ -40,13 +47,15 @@ def main():
 
     # Create Map
     map = OccupancyGrid2D(half_size=350)
-    
+
     # Initial Map Update
     state = env.get_state()
     robot_pos = env.robots[0].get_position()[:2]
     robot_theta = env.robots[0].get_rpy()[2]
-    map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-    
+    map.update_with_grid(
+        occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta
+    )
+
     current_state = RobotState.INIT
     # Init done outside loop for now
     for i in range(11):
@@ -57,18 +66,23 @@ def main():
         state = env.get_state()
         robot_pos = env.robots[0].get_position()[:2]
         robot_theta = env.robots[0].get_rpy()[2]
-        
-        map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-        
-        #Sample points from depth sensor to accompany lidar occupancy grid
+
+        map.update_with_grid(
+            occupancy_grid=state["occupancy_grid"],
+            position=robot_pos,
+            theta=robot_theta,
+        )
+
+        # Sample points from depth sensor to accompany lidar occupancy grid
         depth = state["depth"]
         samplesize = 1000
-        rows = np.random.randint(depth.shape[0], size = samplesize)
-        columns = np.random.randint(depth.shape[0], size = samplesize)
+        rows = np.random.randint(depth.shape[0], size=samplesize)
+        columns = np.random.randint(depth.shape[0], size=samplesize)
         points = []
         for it in range(0, samplesize):
-            d = depth[rows[it], columns[it],0]
-            if d == 0 : continue
+            d = depth[rows[it], columns[it], 0]
+            if d == 0:
+                continue
             p = pixel_to_point(env, rows[it], columns[it], d)
             if p[2] > 0.05:
                 points.append(p)
@@ -90,18 +104,30 @@ def main():
                 if len(line) > 10:
                     samples = sample_around_frontier(line, map)
                     print(samples)
-                    samples.sort(key=lambda x: np.linalg.norm([robot_pos[0] - x[0], robot_pos[1] - x[1], robot_theta - x[2]]))
+                    samples.sort(
+                        key=lambda x: np.linalg.norm(
+                            [
+                                robot_pos[0] - x[0],
+                                robot_pos[1] - x[1],
+                                robot_theta - x[2],
+                            ]
+                        )
+                    )
                     for s in samples:
-                        if not map.check_if_free(s, 0.35): continue
-                        new_info = map.check_new_information(np.array([s[0],s[1]]), s[2], 2.5, 1.5*np.pi)
+                        if not map.check_if_free(s, 0.35):
+                            continue
+                        new_info = map.check_new_information(
+                            np.array([s[0], s[1]]), s[2], 2.5, 1.5 * np.pi
+                        )
                         if new_info > best_info:
                             plan = plan_base_motion(env.robots[0], s, map)
-                            if plan is None: continue
+                            if plan is None:
+                                continue
                             best_info = new_info
                             best_sample = s
                             current_plan = plan
                             break
-    
+
             print(best_sample)
             if current_plan is not None:
                 current_state = RobotState.MOVING
@@ -109,17 +135,22 @@ def main():
             dry_run_base_plan(env, current_plan)
             current_state = RobotState.UPDATING
         elif current_state is RobotState.UPDATING:
-            map.update_with_grid(occupancy_grid=state["occupancy_grid"], position=robot_pos, theta=robot_theta)
-            
-            #Sample points from depth sensor to accompany lidar occupancy grid
+            map.update_with_grid(
+                occupancy_grid=state["occupancy_grid"],
+                position=robot_pos,
+                theta=robot_theta,
+            )
+
+            # Sample points from depth sensor to accompany lidar occupancy grid
             depth = state["depth"]
             samplesize = 1000
-            rows = np.random.randint(depth.shape[0], size = samplesize)
-            columns = np.random.randint(depth.shape[0], size = samplesize)
+            rows = np.random.randint(depth.shape[0], size=samplesize)
+            columns = np.random.randint(depth.shape[0], size=samplesize)
             points = []
             for it in range(0, samplesize):
-                d = depth[rows[it], columns[it],0]
-                if d == 0 : continue
+                d = depth[rows[it], columns[it], 0]
+                if d == 0:
+                    continue
                 p = pixel_to_point(env, rows[it], columns[it], d)
                 if p[2] > 0.05:
                     points.append(p)
@@ -130,8 +161,6 @@ def main():
             current_state = RobotState.PLANNING
         elif current_state is RobotState.END:
             break
-
-
 
 
 if __name__ == "__main__":

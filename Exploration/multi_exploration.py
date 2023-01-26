@@ -6,13 +6,14 @@ import numpy as np
 import cv2
 
 from scipy.ndimage import binary_erosion, binary_dilation
-from soph.utils.occupancy_from_scan import get_local_occupancy_grid
+from soph.occupancy_grid.occupancy_from_scan import get_local_occupancy_grid
 
-from yolo_mask_utils import create_model, get_detections
+from ..yolo.yolo_mask_utils import create_model, get_detections
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
-from soph.utils.occupancy_grid import OccupancyGrid2D
+from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
+from soph.occupancy_grid.occupancy_utils import spin_and_update
 
 from soph.utils.motion_planning import (
     teleport,
@@ -72,32 +73,7 @@ def main(log_dir):
     detection_tool = DetectionTool()
 
     # Initial Map Update
-    state = env.get_state()
-    robot_pos = env.robots[0].get_position()[:2]
-    robot_theta = env.robots[0].get_rpy()[2]
-
-    current_state = RobotState.INIT
-    # Init done outside loop for now
-    for i in range(10):
-        new_robot_theta = robot_theta + 0.2 * np.pi
-        plan = [robot_pos[0], robot_pos[1], new_robot_theta]
-        teleport(env, plan)
-
-        state = env.get_state()
-        robot_pos = env.robots[0].get_position()[:2]
-        robot_theta = env.robots[0].get_rpy()[2]
-
-        scan_grid = get_local_occupancy_grid(
-            env, state["scan"], 128, 5.0, DEFAULT_FOOTPRINT_RADIUS
-        )
-        occupancy_map.update_with_grid_direct(
-            occupancy_grid=scan_grid,
-            position=robot_pos,
-        )
-
-        # Sample points from depth sensor to accompany lidar occupancy grid
-        depth = state["depth"]
-        occupancy_map.update_from_depth(env, depth, 5000)
+    spin_and_update(env, occupancy_map)
 
     navigation_graph = NavGraph(np.array(robot_pos))
 
@@ -114,6 +90,8 @@ def main(log_dir):
     waypoints = None
     current_frontier = None
     frontier_plan = None
+
+    total_distance = 0
 
     while True:
         if current_state is RobotState.PLANNING:
@@ -203,6 +181,8 @@ def main(log_dir):
 
         elif current_state is RobotState.MOVING:
             current_point = current_plan.pop(0)
+            robot_pos = env.robots[0].get_position()[:2]
+            total_distance += np.linalg.norm(robot_pos - current_point[:2])
             teleport(env, current_point)
             detection_tool.remove_close_pois(current_point)
 
@@ -268,41 +248,7 @@ def main(log_dir):
                             )
 
         elif current_state is RobotState.UPDATING:
-            env.step(None)
-
-            state = env.get_state()
-            robot_pos = env.robots[0].get_position()[:2]
-            robot_theta = env.robots[0].get_rpy()[2]
-            occupancy_map.update_with_grid(
-                occupancy_grid=state["occupancy_grid"],
-                position=robot_pos,
-                theta=robot_theta,
-            )
-
-            # Sample points from depth sensor to accompany lidar occupancy grid
-            depth = state["depth"]
-            occupancy_map.update_from_depth(env, depth)
-
-            for i in range(10):
-                new_robot_theta = robot_theta + 0.2 * np.pi
-                plan = [robot_pos[0], robot_pos[1], new_robot_theta]
-                teleport(env, plan)
-
-                state = env.get_state()
-                robot_pos = env.robots[0].get_position()[:2]
-                robot_theta = env.robots[0].get_rpy()[2]
-
-                scan_grid = get_local_occupancy_grid(
-                    env, state["scan"], 128, 5.0, DEFAULT_FOOTPRINT_RADIUS
-                )
-                occupancy_map.update_with_grid_direct(
-                    occupancy_grid=scan_grid,
-                    position=robot_pos,
-                )
-
-                # Sample points from depth sensor to accompany lidar occupancy grid
-                depth = state["depth"]
-                occupancy_map.update_from_depth(env, depth, 5000)
+            spin_and_update(env, occupancy_map)
 
             navigation_graph.update_with_robot_pos(robot_pos, occupancy_map)
             save_nav_map(log_dir, occupancy_map, navigation_graph)
@@ -313,6 +259,8 @@ def main(log_dir):
 
         elif current_state is RobotState.END:
             env.step(None)
+            logging.info("Final total distance: %.3f m", total_distance)
+            break
 
 
 if __name__ == "__main__":

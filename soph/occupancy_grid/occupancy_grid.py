@@ -1,7 +1,8 @@
 import numpy as np
+import random
 import cv2
 import matplotlib.pyplot as plt
-from soph.utils.utils import pixel_to_point
+from soph.utils.utils import pixel_to_point, bbox
 from scipy.ndimage import binary_erosion, binary_dilation
 
 from igibson.utils.constants import OccupancyGridState
@@ -234,7 +235,7 @@ class OccupancyGrid2D:
         return new_info
 
     def line_of_sight(self, pos_in_map, goal_in_map):
-        length = 2 * np.linalg.norm(pos_in_map - goal_in_map)
+        length = np.linalg.norm(pos_in_map - goal_in_map)
         for i in range(0, int(length) - 1):
             point = pos_in_map * ((length - i) / length) + goal_in_map * (i / length)
             if self.grid[int(point[0]), int(point[1])] == OccupancyGridState.OBSTACLES:
@@ -263,3 +264,16 @@ class OccupancyGrid2D:
         refined_map[occupied_refined == 1] = OccupancyGridState.OBSTACLES
         refined_map[self.depth_grid == 0] = OccupancyGridState.OBSTACLES
         return refined_map
+
+    def sample_uniform(self):
+        rmin, rmax, cmin, cmax = bbox(self.grid != OccupancyGridState.UNKNOWN)
+        p_r = random.uniform(0, 1)
+        r = int(np.round(rmin + (rmax - rmin) * p_r))
+        p_c = random.uniform(0, 1)
+        c = int(np.round(cmin + (cmax - cmin) * p_c))
+        while self.grid[r, c] == OccupancyGridState.UNKNOWN:
+            p_r = random.uniform(0, 1)
+            r = int(np.round(rmin + (rmax - rmin) * p_r))
+            p_c = random.uniform(0, 1)
+            c = int(np.round(cmin + (cmax - cmin) * p_c))
+        return self.px_to_m(np.array([r, c]))
