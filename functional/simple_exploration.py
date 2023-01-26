@@ -39,7 +39,7 @@ def main():
     env.reset()
 
     # Create Map
-    map = OccupancyGrid2D()
+    map = OccupancyGrid2D(half_size=350)
     
     # Initial Map Update
     state = env.get_state()

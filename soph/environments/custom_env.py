@@ -495,3 +495,7 @@ class CustomEnv(BaseEnv):
         self.reset_variables()
 
         return state
+    
+    def simulation_time(self):
+        frames = self.simulator.frame_count
+        return frames * self.simulator.render_timestep

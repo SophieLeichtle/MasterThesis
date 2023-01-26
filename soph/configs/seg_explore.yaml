@@ -8,7 +8,8 @@ trav_map_type: no_obj
 trav_map_resolution: 0.1
 trav_map_erosion: 2
 should_open_all_doors: true
-
+# load_object_categories: ["armchair", "window"]
+not_load_object_categories: ["door"]
 # domain randomization
 texture_randomization_freq: null
 object_randomization_freq: null

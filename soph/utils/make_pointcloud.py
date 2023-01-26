@@ -20,6 +20,7 @@ from pcd_dict import PointCloudDict
 
 from soph import point_clouds_path
 
+
 def main(selection="user", headless=False, short_exec=False):
     """
     Create a PointCloud
@@ -43,14 +44,14 @@ def main(selection="user", headless=False, short_exec=False):
         "-r",
         default=1.0,
         help="radius at which to observe the object",
-        type=np.float64
+        type=np.float64,
     )
     parser.add_argument(
         "--iterations",
         "-i",
         default=100,
         help="number of sampled viewpoints",
-        type=np.int64
+        type=np.int64,
     )
     args = parser.parse_args()
 
@@ -59,13 +60,13 @@ def main(selection="user", headless=False, short_exec=False):
         image_width=512,
         image_height=512,
     )
-    scene = EmptyScene(render_floor_plane=False,floor_plane_rgba=[0.6, 0.6, 0.6, 1])
+    scene = EmptyScene(render_floor_plane=False, floor_plane_rgba=[0.6, 0.6, 0.6, 1])
     # scene.load_object_categories(benchmark_names)
-    s.import_scene(scene)  
+    s.import_scene(scene)
 
     category = args.category
     model = args.model
-    
+
     model_path = get_ig_model_path(category, model)
     filename = os.path.join(model_path, model + ".urdf")
 
@@ -73,19 +74,19 @@ def main(selection="user", headless=False, short_exec=False):
 
     obj_name = "{}_{}".format("floor_lamp", 1)
     simulator_obj = URDFObject(
-                filename,
-                name=obj_name,
-                category=category,
-                model_path=model_path,
-                avg_obj_dims=avg_category_spec.get(category),
-                fit_avg_dim_volume=True,
-                texture_randomization=False,
-                overwrite_inertial=True,
-                fixed_base=True
-            )
-    
+        filename,
+        name=obj_name,
+        category=category,
+        model_path=model_path,
+        avg_obj_dims=avg_category_spec.get(category),
+        fit_avg_dim_volume=True,
+        texture_randomization=False,
+        overwrite_inertial=True,
+        fixed_base=True,
+    )
+
     s.import_object(simulator_obj)
-    simulator_obj.set_position_orientation([0,0,0.7], quat_from_euler([0,0,0]))
+    simulator_obj.set_position_orientation([0, 0, 0.7], quat_from_euler([0, 0, 0]))
     s.step()
 
     point_cloud = PointCloudDict(precision=3, sub_precision=1)
@@ -99,29 +100,33 @@ def main(selection="user", headless=False, short_exec=False):
         y = args.radius * np.sin(theta[i]) * np.sin(phi[i])
         z = args.radius * np.cos(theta[i])
 
-        camera_pose = np.array([x,y,z+0.7])
-        view_direction = np.array([-x,-y,-z-0.7])
+        camera_pose = np.array([x, y, z + 0.7])
+        view_direction = np.array([-x, -y, -z - 0.7])
         s.renderer.set_camera(camera_pose, camera_pose + view_direction, [0, 0, 1])
         s.renderer.set_fov(90)
 
         frames = s.renderer.render(modes=("3d", "seg"))
-        seg = (frames[1][:,:,0:1]*512).astype(np.int32)
+        seg = (frames[1][:, :, 0:1] * 512).astype(np.int32)
         depth = frames[0]
         detections = np.unique(seg)
         if goal_id in detections:
-            rmin, rmax, cmin, cmax = bbox(seg == goal_id)      
-            for r in range(rmin, rmax+1):
+            rmin, rmax, cmin, cmax = bbox(seg == goal_id)
+            for r in range(rmin, rmax + 1):
                 for c in range(cmin, cmax + 1):
-                    if seg[r,c,0] != goal_id: continue
-                    point = depth[r,c,:]
+                    if seg[r, c, 0] != goal_id:
+                        continue
+                    point = depth[r, c, :]
                     point_in_wf = np.dot(np.linalg.inv(s.renderer.V), point)
                     point_cloud.insert(point_in_wf[:3])
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(point_cloud.point_array())
-    pcd.translate((0,0,-0.7))
-    o3d.io.write_point_cloud(os.path.join(point_clouds_path,category+"-"+model+".ply"), pcd)
+    pcd.translate((0, 0, -0.7))
+    o3d.io.write_point_cloud(
+        os.path.join(point_clouds_path, category + "-" + model + ".ply"), pcd
+    )
     print(pcd.get_center())
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
