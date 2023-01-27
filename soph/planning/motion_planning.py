@@ -1,9 +1,8 @@
 from soph.utils.utils import bbox
-from soph.utils.frontier_utils import (
-    extract_frontiers,
+from soph.planning.frontiers.frontier_utils import (
     sample_around_frontier,
-    distance_to_frontier,
 )
+from soph.planning.frontiers.frontier_extraction import extract_frontiers
 import numpy as np
 from igibson.external.pybullet_tools.utils import (
     plan_base_motion_2d,
@@ -16,7 +15,7 @@ from igibson.utils.constants import OccupancyGridState
 import time
 
 from soph import DEFAULT_FOOTPRINT_RADIUS
-from soph.utils.plan_base_2d_custom import plan_base_motion_custom
+from soph.planning.plan_base_2d_custom import plan_base_motion_custom
 
 
 def plan_base_motion(
@@ -172,52 +171,6 @@ def frontier_plan_shortdistance(env, map, verbose=False):
                 if plan is not None:
                     return plan, line
     return None, []
-
-
-def frontier_plan_with_nav(env, map, nav_graph):
-    """
-    Create a plan for the next point to be navigated to using frontier exploration.
-    The next frontier is selected based on shortest navigation distance.
-    To calculate distance, the navigation graph is used.
-    """
-    robot_pos = env.robots[0].get_position()[:2]
-    robot_theta = env.robots[0].get_rpy()[2]
-
-    frontier_lines = extract_frontiers(map.grid)
-    frontiers = []
-
-    for frontier in frontier_lines:
-        if len(frontier) < 10:
-            continue
-        dist, node = distance_to_frontier(frontier, robot_pos, nav_graph, map)
-        frontiers.append((frontier, dist, node))
-
-    frontiers.sort(key=lambda x: x[1])
-
-    for frontier, dist, node in frontiers:
-
-        if node is None:
-            plan = plan_to_frontier(
-                [robot_pos[0], robot_pos[1], robot_theta], map, frontier
-            )
-            if plan is not None:
-                return [], plan, frontier
-        else:
-            waypoints = node.get_path()
-            if len(waypoints) < 2:
-                current_point = robot_pos
-            else:
-                current_point = waypoints[-2].position
-            next_point = waypoints[-1].position
-            theta = np.arctan2(
-                next_point[1] - current_point[1], next_point[0] - current_point[0]
-            )
-            plan = plan_to_frontier(
-                [next_point[0], next_point[1], theta], map, frontier
-            )
-            if plan is not None:
-                return waypoints, plan, frontier
-    return None, None, []
 
 
 def plan_to_frontier(start_config, map, frontier):

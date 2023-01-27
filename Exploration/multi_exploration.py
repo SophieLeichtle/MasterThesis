@@ -15,14 +15,16 @@ from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 from soph.occupancy_grid.occupancy_utils import spin_and_update
 
-from soph.utils.motion_planning import (
+from soph.planning.motion_planning import (
     teleport,
     get_poi,
     plan_with_poi,
     plan_base_motion,
-    frontier_plan_with_nav,
     sample_plan_poi,
 )
+
+from soph.planning.nav_graph.nav_graph_planning import frontier_plan_with_nav
+
 from soph.utils.logging_utils import (
     save_map,
     initiate_logging,
@@ -30,7 +32,7 @@ from soph.utils.logging_utils import (
     save_map_combo,
 )
 from soph.utils.utils import bbox, px_to_3d, openglf_to_wf
-from soph.utils.nav_graph import NavGraph
+from soph.planning.nav_graph.nav_graph import NavGraph
 
 
 from soph.utils.detection_tool import DetectionTool

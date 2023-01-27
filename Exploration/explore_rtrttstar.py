@@ -8,17 +8,21 @@ import time
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
-from soph.occupancy_grid.occupancy_utils import spin_and_update
+from soph.occupancy_grid.occupancy_utils import spin_and_update, refine_map
 
 from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
-from soph.planning.rt_rrt_star.rt_rrt_star_utils import closest_frontier
+from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
+    next_goal,
+    FrontierSelectionMethod,
+)
 
-from soph.utils.motion_planning import (
+from soph.planning.motion_planning import (
     teleport,
 )
 from soph.utils.logging_utils import (
     initiate_logging,
     save_map_rt_rrt_star,
+    save_map_rt_rrt_star_detailed,
 )
 
 from soph import DEFAULT_FOOTPRINT_RADIUS
@@ -74,13 +78,19 @@ def main(dir_path):
     save_map_rt_rrt_star(file_name, robot_pos, occupancy_map, rt_rrt_star)
     iters += 1
 
+    # detailed_iters = 0
+    # os.makedirs(os.path.join(dir_path, "detailed"))
+    # file_name = os.path.join(dir_path, "detailed", f"{detailed_iters:05d}.png")
+    # save_map_rt_rrt_star_detailed(file_name, occupancy_map, rt_rrt_star)
+    # detailed_iters += 1
+
     total_distance = 0
 
     start_time = time.process_time()
     while True:
         if time.process_time() - start_time > 1:
             start_time = time.process_time()
-
+            robot_pos = env.robots[0].get_position()[:2]
             file_name = os.path.join(dir_path, f"{iters:05d}.png")
             save_map_rt_rrt_star(
                 file_name, robot_pos, occupancy_map, rt_rrt_star, None, current_frontier
@@ -97,7 +107,13 @@ def main(dir_path):
             new_goal = None
             if len(current_frontier) == 0:
                 planning_attempts += 1
-                goal, frontier = closest_frontier(occupancy_map, rt_rrt_star)
+                goal, frontier = next_goal(
+                    env,
+                    occupancy_map,
+                    rt_rrt_star,
+                    FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
+                    True,
+                )
                 if goal is not None:
                     new_goal = goal[:2]
                     current_frontier = frontier
@@ -109,6 +125,9 @@ def main(dir_path):
             current_plan, plan_completed = rt_rrt_star.nextIter(
                 robot_pos, robot_theta, occupancy_map, new_goal
             )
+            # file_name = os.path.join(dir_path, "detailed", f"{detailed_iters:05d}.png")
+            # save_map_rt_rrt_star_detailed(file_name, occupancy_map, rt_rrt_star)
+            # detailed_iters += 1
 
             if current_plan is None:
                 if plan_completed:
@@ -127,6 +146,7 @@ def main(dir_path):
         elif current_state is RobotState.UPDATING:
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
+            refine_map(occupancy_map)
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
 

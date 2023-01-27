@@ -275,3 +275,52 @@ def save_map_rt_rrt_star(
         thickness=-1,
     )
     cv2.imwrite(file_name, map_cv)
+
+
+def save_map_rt_rrt_star_detailed(
+    file_name,
+    occupancy_map,
+    rt_rrt_star,
+):
+
+    map_cv = cv2.cvtColor(occupancy_map.grid * 255, cv2.COLOR_GRAY2RGB)
+    for cluster in rt_rrt_star.node_clusters.clusters.values():
+        for node in cluster:
+            if node.parent() is not None:
+                pos_in_map = occupancy_map.m_to_px(node.position())
+                parent_in_map = occupancy_map.m_to_px(node.parent().position())
+                cv2.line(
+                    map_cv,
+                    [int(pos_in_map[1]), int(pos_in_map[0])],
+                    [int(parent_in_map[1]), int(parent_in_map[0])],
+                    color=(0, 255, 0),
+                    thickness=1,
+                )
+    root_in_map = occupancy_map.m_to_px(rt_rrt_star.root.position())
+
+    for node in rt_rrt_star.Q_s:
+        pos_in_map = occupancy_map.m_to_px(node.position())
+        cv2.circle(
+            map_cv,
+            [int(pos_in_map[1]), int(pos_in_map[0])],
+            radius=2,
+            color=(255, 0, 0),
+        )
+    for node in rt_rrt_star.visited:
+        pos_in_map = occupancy_map.m_to_px(node.position())
+        cv2.circle(
+            map_cv,
+            [int(pos_in_map[1]), int(pos_in_map[0])],
+            radius=1,
+            color=(255, 0, 0),
+        )
+
+    cv2.circle(
+        map_cv,
+        [int(root_in_map[1]), int(root_in_map[0])],
+        radius=2,
+        color=(255, 0, 255),
+        thickness=-1,
+    )
+
+    cv2.imwrite(file_name, map_cv)

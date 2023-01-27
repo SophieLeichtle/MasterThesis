@@ -2,7 +2,7 @@ import numpy as np
 
 from soph.occupancy_grid.occupancy_from_scan import get_local_occupancy_grid
 from soph import DEFAULT_FOOTPRINT_RADIUS
-from soph.utils.motion_planning import teleport
+from soph.planning.motion_planning import teleport
 from igibson.utils.constants import OccupancyGridState
 from scipy.ndimage import binary_erosion, binary_dilation
 

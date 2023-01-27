@@ -60,11 +60,11 @@ class NodeClusters:
             return self.clusters[key]
         return []
 
-    def getNodesAdjacent(self, node, max_radius=5):
+    def getNodesAdjacent(self, node, min_radius=1, max_radius=5):
         nodes = []
         key = self.nodeToKey(node)
         radius = 0
-        while len(nodes) == 0 and radius < max_radius:
+        while radius < min_radius or (len(nodes) == 0 and radius < max_radius):
             radius += 1
             for i in range(-radius, radius + 1):
                 for j in range(-radius, radius + 1):
@@ -206,7 +206,7 @@ class RTRRTstar:
         d = self.dummy_goal_node.distance_direct(closest_to_goal)
 
         path = []
-        if d < threshold:
+        if d < threshold and self.lineOfSight(closest_to_goal, self.dummy_goal_node):
             n = closest_to_goal
             while n is not None:
                 path.insert(0, n)
@@ -298,12 +298,13 @@ class RTRRTstar:
     def findNodesNear(self, node, adjacent_nodes):
         epsilon = max(
             np.sqrt(
-                self.node_clusters.searchSpace()
+                self.map.free_space()
                 * self.k_max
                 / (np.pi * self.node_clusters.totalNodes())
             ),
             self.r_s,
         )
+        print(epsilon)
         near = []
         for n in adjacent_nodes:
             if node.distance_direct(n) <= epsilon:

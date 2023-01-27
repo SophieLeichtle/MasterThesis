@@ -20,9 +20,6 @@ class OccupancyGrid2D:
         self.m_to_pix_ratio = m_to_pix
         self.coordinate_transform = np.array(((0, -1), (1, 0)))
 
-        self.pure_grid = self.grid.copy()
-        self.depth_grid = self.grid.copy()
-
     def px_to_m(self, point):
         """
         Convert a pixel to meters. Pixel does not need to be an integer.
@@ -71,9 +68,6 @@ class OccupancyGrid2D:
                 if occupancy_grid[r][c] == OccupancyGridState.OBSTACLES:
                     rounded_point = [int(round(point[0])), int(round(point[1]))]
                     self.grid[rounded_point[0], rounded_point[1]] = occupancy_grid[r][c]
-                    self.pure_grid[rounded_point[0], rounded_point[1]] = occupancy_grid[
-                        r
-                    ][c]
                     continue
                 for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(
                     np.int32
@@ -83,8 +77,6 @@ class OccupancyGrid2D:
                     ).astype(np.int32):
                         if self.grid[y][x] != OccupancyGridState.OBSTACLES:
                             self.grid[y][x] = occupancy_grid[r][c]
-                        if self.pure_grid[y][x] != OccupancyGridState.OBSTACLES:
-                            self.pure_grid[y][x] = occupancy_grid[r][c]
 
     def update_with_grid_direct(self, occupancy_grid, position):
         robot_pos_in_map = self.m_to_px(position)
@@ -128,9 +120,6 @@ class OccupancyGrid2D:
                 != OccupancyGridState.UNKNOWN
             ):
                 self.grid[
-                    rounded_point[0], rounded_point[1]
-                ] = OccupancyGridState.OBSTACLES
-                self.depth_grid[
                     rounded_point[0], rounded_point[1]
                 ] = OccupancyGridState.OBSTACLES
 
@@ -234,6 +223,22 @@ class OccupancyGrid2D:
             plt.show()
         return new_info
 
+    def new_information_simple(self, position, lidar_range):
+        pos_in_map = self.m_to_px(position)
+        range_in_map = self.m_to_pix_ratio * lidar_range
+
+        filter = np.zeros_like(self.grid)
+        cv2.circle(
+            img=filter,
+            center=[int(pos_in_map[1]), int(pos_in_map[0])],
+            radius=range_in_map,
+            color=1,
+            thickness=-1,
+        )
+
+        points = self.grid[filter == 1]
+        return np.count_nonzero(points == OccupancyGridState.UNKNOWN)
+
     def line_of_sight(self, pos_in_map, goal_in_map):
         length = np.linalg.norm(pos_in_map - goal_in_map)
         for i in range(0, int(length) - 1):
@@ -241,29 +246,6 @@ class OccupancyGrid2D:
             if self.grid[int(point[0]), int(point[1])] == OccupancyGridState.OBSTACLES:
                 return False
         return True
-
-    def line_of_sight_line(self, pos_in_map, line):
-        for point in line:
-            los = self.line_of_sight(pos_in_map, point)
-            if los:
-                return True
-        return False
-
-    def refined_map(self):
-        occupied = self.pure_grid == OccupancyGridState.OBSTACLES
-        occupied_refined = binary_dilation(binary_erosion(occupied))
-
-        free = self.grid == OccupancyGridState.FREESPACE
-        free_refined = binary_erosion(binary_dilation(free))
-
-        refined_map = np.zeros((self.half_size * 2 + 1, self.half_size * 2 + 1)).astype(
-            np.float32
-        )
-        refined_map.fill(OccupancyGridState.UNKNOWN)
-        refined_map[free_refined == 1] = OccupancyGridState.FREESPACE
-        refined_map[occupied_refined == 1] = OccupancyGridState.OBSTACLES
-        refined_map[self.depth_grid == 0] = OccupancyGridState.OBSTACLES
-        return refined_map
 
     def sample_uniform(self):
         rmin, rmax, cmin, cmax = bbox(self.grid != OccupancyGridState.UNKNOWN)
@@ -277,3 +259,7 @@ class OccupancyGrid2D:
             p_c = random.uniform(0, 1)
             c = int(np.round(cmin + (cmax - cmin) * p_c))
         return self.px_to_m(np.array([r, c]))
+
+    def free_space(self):
+        free_pixels = np.count_nonzero(self.grid == OccupancyGridState.FREESPACE)
+        return free_pixels * (1 / self.m_to_pix_ratio) * (1 / self.m_to_pix_ratio)

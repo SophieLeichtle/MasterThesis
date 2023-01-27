@@ -18,29 +18,21 @@ from soph.occupancy_grid.occupancy_utils import (
 )
 
 from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
-from soph.planning.rt_rrt_star.rt_rrt_star_utils import (
+from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
     closest_frontier,
-    closest_frontier_poi,
     goal_from_poi,
 )
 
-from soph.utils.motion_planning import (
+from soph.planning.motion_planning import (
     teleport,
     get_poi,
-    plan_with_poi,
-    plan_base_motion,
-    frontier_plan_with_nav,
-    sample_plan_poi,
 )
 from soph.utils.logging_utils import (
-    save_map,
     initiate_logging,
-    save_nav_map,
-    save_map_combo,
     save_map_rt_rrt_star,
 )
 from soph.utils.utils import bbox, px_to_3d, openglf_to_wf
-from soph.utils.nav_graph import NavGraph
+from soph.planning.nav_graph.nav_graph import NavGraph
 
 
 from soph.utils.detection_tool import DetectionTool
