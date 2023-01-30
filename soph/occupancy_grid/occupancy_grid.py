@@ -253,7 +253,7 @@ class OccupancyGrid2D:
         r = int(np.round(rmin + (rmax - rmin) * p_r))
         p_c = random.uniform(0, 1)
         c = int(np.round(cmin + (cmax - cmin) * p_c))
-        while self.grid[r, c] == OccupancyGridState.UNKNOWN:
+        while self.grid[r, c] != OccupancyGridState.FREESPACE:
             p_r = random.uniform(0, 1)
             r = int(np.round(rmin + (rmax - rmin) * p_r))
             p_c = random.uniform(0, 1)

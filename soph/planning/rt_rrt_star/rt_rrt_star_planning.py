@@ -2,7 +2,7 @@ import numpy as np
 import logging
 import random
 
-from enum import IntEnum
+from soph.planning.motion_planning import FrontierSelectionMethod
 
 from soph.planning.frontiers.frontier_utils import (
     sample_around_frontier,
@@ -19,14 +19,6 @@ from soph.planning.rt_rrt_star.rt_rrt_star_utils import (
 
 from soph import DEFAULT_FOOTPRINT_RADIUS
 from igibson.utils.constants import OccupancyGridState
-
-
-class FrontierSelectionMethod(IntEnum):
-    RANDOM = 0
-    CLOSEST_EUCLID = 1
-    CLOSEST_GRAPH_SIMPLE = 2
-    CLOSEST_GRAPH_VISIBLE = 3
-    BESTINFO = 4
 
 
 def next_goal(env, occupancy_map, rt_rrt_star, method, require_line_of_sight=False):

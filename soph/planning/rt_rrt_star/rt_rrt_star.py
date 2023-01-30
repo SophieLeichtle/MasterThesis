@@ -119,20 +119,24 @@ class RTRRTstar:
             self.expandAndRewire()
 
     # Algorithm 1: RT-RRT*
-    def nextIter(self, robot_pos, robot_theta, occupancy_map, new_goal=None):
+    def nextIter(
+        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.1
+    ):
         # Update to most up-to-date map
         self.map = occupancy_map
         # Update Goal
         if new_goal is not None:
             self.setGoalNode(new_goal)
         # Expand and Rewire as long as time is left
-        self.expandAndRewire()
+        start_time = time.process_time()
+        while time.process_time() - start_time < max_time:
+            self.expandAndRewire(max_time + start_time - time.process_time())
         self.updateNextBestPath()
         while np.linalg.norm(robot_pos - self.current_path[0].position()) < 0.05:
             if len(self.current_path) > 1:
                 self.current_path.pop(0)
                 self.changeRoot(self.current_path[0])
-            if len(self.current_path) == 1:
+            elif len(self.current_path) == 1:
                 if self.isPathToGoalAvailable():
                     return None, True
                 else:

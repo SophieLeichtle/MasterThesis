@@ -19,16 +19,17 @@ from detectron2.layers import paste_masks_in_image
 import torchvision
 import time
 from torch.nn import functional as F
+import os
 
 
 @torch.no_grad()
-def create_model():
+def create_model(directory="yolo_files"):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    with open("yolo/hyp.scratch.mask.yaml") as f:
+    with open(os.path.join(directory, "hyp.scratch.mask.yaml")) as f:
         hyp = yaml.load(f, Loader=yaml.FullLoader)
 
-    weights = torch.load("yolo/yolov7-mask.pt")
+    weights = torch.load(os.path.join(directory, "yolov7-mask.pt"))
     model = weights["model"]
     model.half().to(device)
     _ = model.eval()

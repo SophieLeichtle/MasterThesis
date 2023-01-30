@@ -13,12 +13,9 @@ from soph.occupancy_grid.occupancy_utils import spin_and_update, refine_map
 from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
 from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
     next_goal,
-    FrontierSelectionMethod,
 )
 
-from soph.planning.motion_planning import (
-    teleport,
-)
+from soph.planning.motion_planning import teleport, FrontierSelectionMethod
 from soph.utils.logging_utils import (
     initiate_logging,
     save_map_rt_rrt_star,
@@ -71,7 +68,10 @@ def main(dir_path):
     logging.info("Entering State: PLANNING")
 
     planning_attempts = 0
-    max_planning_attempts = 10
+    max_planning_attempts = 100
+
+    rtt_iters = 0
+    max_rtt_iters = 1000
 
     iters = 0
     file_name = os.path.join(dir_path, f"{iters:05d}.png")
@@ -119,7 +119,7 @@ def main(dir_path):
                     current_frontier = frontier
                     planning_attempts = 0
                 else:
-                    if planning_attempts == max_planning_attempts:
+                    if planning_attempts >= max_planning_attempts:
                         current_state = RobotState.END
                     continue
             current_plan, plan_completed = rt_rrt_star.nextIter(
@@ -133,8 +133,14 @@ def main(dir_path):
                 if plan_completed:
                     current_frontier = []
                     current_state = RobotState.UPDATING
+                    rtt_iters = 0
+                else:
+                    rtt_iters += 1
+                    if rtt_iters >= max_rtt_iters:
+                        current_state = RobotState.END
 
             else:
+                rtt_iters = 0
                 current_state = RobotState.MOVING
 
         elif current_state is RobotState.MOVING:

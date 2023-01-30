@@ -13,9 +13,17 @@ import logging
 from igibson.utils.constants import OccupancyGridState
 
 import time
-
+from enum import IntEnum
 from soph import DEFAULT_FOOTPRINT_RADIUS
 from soph.planning.plan_base_2d_custom import plan_base_motion_custom
+
+
+class FrontierSelectionMethod(IntEnum):
+    RANDOM = 0
+    CLOSEST_EUCLID = 1
+    CLOSEST_GRAPH_SIMPLE = 2
+    CLOSEST_GRAPH_VISIBLE = 3
+    BESTINFO = 4
 
 
 def plan_base_motion(

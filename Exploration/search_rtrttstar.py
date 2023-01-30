@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 import time
 
-from ..yolo.yolo_mask_utils import create_model, get_detections
+from soph.yolo.yolo_mask_utils import create_model, get_detections
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
@@ -21,12 +21,10 @@ from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
 from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
     closest_frontier,
     goal_from_poi,
+    next_goal,
 )
 
-from soph.planning.motion_planning import (
-    teleport,
-    get_poi,
-)
+from soph.planning.motion_planning import teleport, get_poi, FrontierSelectionMethod
 from soph.utils.logging_utils import (
     initiate_logging,
     save_map_rt_rrt_star,
@@ -131,7 +129,13 @@ def main(dir_path):
                 planning_attempts += 1
                 if len(detection_tool.pois) == 0:
 
-                    goal, frontier = closest_frontier(occupancy_map, rt_rrt_star)
+                    goal, frontier = next_goal(
+                        env,
+                        occupancy_map,
+                        rt_rrt_star,
+                        FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
+                        True,
+                    )
 
                 else:
                     closest_poi = detection_tool.closest_poi(robot_pos)
