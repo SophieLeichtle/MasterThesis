@@ -28,7 +28,7 @@ from soph.utils.logging_utils import (
     save_nav_map,
     save_map_combo,
 )
-from soph.utils.utils import bbox, px_to_3d, openglf_to_wf
+from soph.utils.utils import bbox, px_to_3d, openglf_to_wf, center_ransac
 
 from soph.planning.nav_graph.nav_graph_planning import next_frontier
 from soph.utils.detection_tool import DetectionTool
@@ -197,48 +197,17 @@ def main(dir_path):
                 env, model, device, hyp, queried_semantic, True
             )
             if detections is not None:
-                state = env.get_state()
-                depth = state["depth"]
-                for detection, mask in zip(detections, masks):
-                    masked_depth = depth[:, :, 0] * mask
-                    if np.count_nonzero(masked_depth) > 50:
-                        rmin, rmax, cmin, cmax = bbox(masked_depth)
-                        points = []
-                        t_mat = openglf_to_wf(env.robots[0])
-                        for row in range(rmin, rmax + 1):
-                            for col in range(cmin, cmax + 1):
-                                d = masked_depth[row, col]
-                                if d == 0:
-                                    continue
-                                point = px_to_3d(
-                                    row, col, d, t_mat, env.config["depth_high"]
-                                )
-                                if point[2] > 0.05:
-                                    points.append(point)
 
-                        new_detection = detection_tool.register_definitive_detection(
-                            points
-                        )
-                        if new_detection is not None:
-                            logging.info(
-                                "New Detection Located at %.2f, %.2f",
-                                new_detection.position[0],
-                                new_detection.position[1],
-                            )
-                            current_plan = None
-                            waypoints = None
-                            current_state = RobotState.UPDATING
-                            logging.info("Current Plan Aborted")
-                            logging.info("Entering State: UPDATING")
-                    else:
-                        poi = get_poi(detection)
-                        new = detection_tool.register_new_poi(poi)
-                        if new:
-                            logging.info(
-                                "Object Detected: New POI added at %.2f, %.2f",
-                                poi[0],
-                                poi[1],
-                            )
+                new_detection = detection_tool.process_detections(
+                    env, detections, masks
+                )
+
+                if new_detection:
+                    current_plan = None
+                    waypoints = None
+                    current_state = RobotState.UPDATING
+                    logging.info("Current Plan Aborted")
+                    logging.info("Entering State: UPDATING")
 
         elif current_state is RobotState.UPDATING:
             logging.info("Current total distance: %.3f m", total_distance)
