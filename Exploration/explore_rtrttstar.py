@@ -4,6 +4,7 @@ from enum import IntEnum
 import yaml
 import numpy as np
 import time
+import csv
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
@@ -85,15 +86,28 @@ def main(dir_path):
     # detailed_iters += 1
 
     total_distance = 0
+    csv_file = os.path.join(dir_path, "stats.csv")
 
-    start_time = time.process_time()
+    with open(csv_file, "w") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        fields = ["Distance", "Explored"]
+        csvwriter.writerow(fields)
+        entry = [total_distance, occupancy_map.explored_space()]
+        csvwriter.writerow(entry)
+
+    frames = 0
     while True:
-        if time.process_time() - start_time > 1:
-            start_time = time.process_time()
-            robot_pos = env.robots[0].get_position()[:2]
+        frames += 1
+        if frames >= 30:
+            frames = 0
             file_name = os.path.join(dir_path, f"{iters:05d}.png")
             save_map_rt_rrt_star(
-                file_name, robot_pos, occupancy_map, rt_rrt_star, None, current_frontier
+                file_name,
+                robot_pos,
+                occupancy_map,
+                rt_rrt_star,
+                None,
+                current_frontier,
             )
 
             iters += 1
@@ -153,6 +167,11 @@ def main(dir_path):
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
+            with open(csv_file, "a") as csvfile:
+                csvwriter = csv.writer(csvfile)
+                entry = [total_distance, occupancy_map.explored_space()]
+                csvwriter.writerow(entry)
+
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
 
@@ -166,5 +185,5 @@ def main(dir_path):
 
 
 if __name__ == "__main__":
-    dir_path = initiate_logging("inseg_exploration.log")
+    dir_path = initiate_logging("exploration.log")
     main(dir_path)

@@ -18,7 +18,7 @@ def frontier_distance_simple(frontier, occupancy_map, rt_rrt_star):
 
 
 def frontier_distance_visible(frontier, occupancy_map, rt_rrt_star, max_iters=5):
-    iter = 0
+    iter = 1
     closest_node = None
     best_dist = np.inf
 

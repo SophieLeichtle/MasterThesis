@@ -250,7 +250,11 @@ class RTRRTstar:
         if p_r > 1 - alpha:
             vec = self.dummy_goal_node.position() - self.root.position()
             p_v = random.uniform(0, 1)
-            pos = self.root.position() + p_v * vec
+            pos = (
+                self.root.position()
+                + p_v * vec
+                + np.array([random.uniform(-0.25, 0.25), random.uniform(-0.25, 0.25)])
+            )
         elif p_r <= (1 - alpha) / beta or not self.isPathToGoalAvailable():
             pos = self.map.sample_uniform()
         else:
@@ -308,7 +312,6 @@ class RTRRTstar:
             ),
             self.r_s,
         )
-        print(epsilon)
         near = []
         for n in adjacent_nodes:
             if node.distance_direct(n) <= epsilon:

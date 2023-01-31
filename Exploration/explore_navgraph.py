@@ -4,6 +4,7 @@ from enum import IntEnum
 import yaml
 import numpy as np
 import time
+import csv
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
@@ -45,7 +46,7 @@ def main(dir_path):
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = os.path.join(configs_path, "seg_explore copy.yaml")
+    config_filename = os.path.join(configs_path, "beechwood.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     # Create Environment
@@ -82,12 +83,20 @@ def main(dir_path):
     os.makedirs(nav_dir)
     save_nav_map(nav_dir, occupancy_map, navigation_graph)
 
+    csv_file = os.path.join(dir_path, "stats.csv")
+
     logging.info("Entering State: PLANNING")
 
     planning_attempts = 0
     max_planning_attempts = 10
 
     total_distance = 0
+    with open(csv_file, "w") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        fields = ["Distance", "Explored"]
+        csvwriter.writerow(fields)
+        entry = [total_distance, occupancy_map.explored_space()]
+        csvwriter.writerow(entry)
 
     while True:
 
@@ -176,6 +185,11 @@ def main(dir_path):
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
             save_nav_map(nav_dir, occupancy_map, navigation_graph)
+            with open(csv_file, "a") as csvfile:
+                csvwriter = csv.writer(csvfile)
+                entry = [total_distance, occupancy_map.explored_space()]
+                csvwriter.writerow(entry)
+
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
 

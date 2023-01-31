@@ -263,3 +263,7 @@ class OccupancyGrid2D:
     def free_space(self):
         free_pixels = np.count_nonzero(self.grid == OccupancyGridState.FREESPACE)
         return free_pixels * (1 / self.m_to_pix_ratio) * (1 / self.m_to_pix_ratio)
+
+    def explored_space(self):
+        explored_pixels = np.count_nonzero(self.grid != OccupancyGridState.UNKNOWN)
+        return explored_pixels * (1 / self.m_to_pix_ratio) * (1 / self.m_to_pix_ratio)
