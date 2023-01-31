@@ -104,9 +104,13 @@ def main(dir_path):
     csv_file = os.path.join(dir_path, "stats.csv")
     with open(csv_file, "w") as csvfile:
         csvwriter = csv.writer(csvfile)
-        fields = ["Distance", "Explored"]
+        fields = ["Distance", "Explored", "Found"]
         csvwriter.writerow(fields)
-        entry = [total_distance, occupancy_map.explored_space()]
+        entry = [
+            total_distance,
+            occupancy_map.explored_space(),
+            len(detection_tool.definitive_detections),
+        ]
         csvwriter.writerow(entry)
 
     frames = 0
@@ -214,7 +218,11 @@ def main(dir_path):
             refine_map(occupancy_map)
             with open(csv_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)
-                entry = [total_distance, occupancy_map.explored_space()]
+                entry = [
+                    total_distance,
+                    occupancy_map.explored_space(),
+                    len(detection_tool.definitive_detections),
+                ]
                 csvwriter.writerow(entry)
 
             current_state = RobotState.PLANNING
