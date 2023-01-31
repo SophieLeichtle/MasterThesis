@@ -13,7 +13,7 @@ def frontier_distance_simple(frontier_line, robot_pos, occupancy_map, nav_graph)
     dist_direct = closest_node_direct.get_cost() + np.linalg.norm(
         closest_node_direct.position - frontier_center
     )
-    if dist_direct < dist_robot and closest_node_direct is not nav_graph.root:
+    if dist_direct < dist_robot or closest_node_direct is not nav_graph.root:
         return dist_direct, closest_node_direct
     return dist_robot, nav_graph.root
 

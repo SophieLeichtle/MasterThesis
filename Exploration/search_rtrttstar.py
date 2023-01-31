@@ -161,7 +161,7 @@ def main(dir_path):
                     current_frontier = frontier
                     planning_attempts = 0
                 else:
-                    logging.info("Planning attempt {}", planning_attempts)
+                    logging.info("Planning attempt %i", planning_attempts)
                     if planning_attempts == max_planning_attempts:
                         current_state = RobotState.END
                         continue

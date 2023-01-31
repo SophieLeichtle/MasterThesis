@@ -49,6 +49,10 @@ def main(dir_path):
     config_filename = os.path.join(configs_path, "beechwood.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
+    frontier_method = FrontierSelectionMethod.RANDOM
+
+    logging.info("Frontier Selection Method: %s", frontier_method.name)
+
     # Create Environment
     logging.info("Creating Environment")
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
@@ -112,7 +116,7 @@ def main(dir_path):
                     env,
                     occupancy_map,
                     navigation_graph,
-                    FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
+                    FrontierSelectionMethod.RANDOM,
                 )
 
             if waypoints is not None:
