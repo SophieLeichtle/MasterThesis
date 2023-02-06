@@ -40,13 +40,16 @@ def main(dir_path):
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = os.path.join(configs_path, "seg_explore copy.yaml")
+    config_filename = os.path.join(configs_path, "beechwood.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     # Create Environment
     logging.info("Creating Environment")
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
     env.reset()
+
+    frontier_method = FrontierSelectionMethod.FUSION
+    logging.info("Frontier Selection Method: %s", frontier_method.name)
 
     # Create Map
     occupancy_map = OccupancyGrid2D(half_size=350)
@@ -65,11 +68,12 @@ def main(dir_path):
 
     current_frontier = []
     current_plan = None
+    current_goal = None
 
     logging.info("Entering State: PLANNING")
 
     planning_attempts = 0
-    max_planning_attempts = 100
+    max_planning_attempts = 30
 
     rtt_iters = 0
     max_rtt_iters = 1000
@@ -119,23 +123,29 @@ def main(dir_path):
             robot_theta = env.robots[0].get_rpy()[2]
 
             new_goal = None
-            if len(current_frontier) == 0:
+            if current_goal is None:
                 planning_attempts += 1
                 goal, frontier = next_goal(
                     env,
                     occupancy_map,
                     rt_rrt_star,
-                    FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
+                    frontier_method,
                     True,
                 )
                 if goal is not None:
                     new_goal = goal[:2]
+                    current_goal = goal
                     current_frontier = frontier
                     planning_attempts = 0
                 else:
+                    logging.info("Planning attempt %i", planning_attempts)
                     if planning_attempts >= max_planning_attempts:
+                        logging.info(
+                            "Max Planning attempts reached: Entering State END"
+                        )
                         current_state = RobotState.END
-                    continue
+                        continue
+
             current_plan, plan_completed = rt_rrt_star.nextIter(
                 robot_pos, robot_theta, occupancy_map, new_goal
             )
@@ -144,13 +154,16 @@ def main(dir_path):
             # detailed_iters += 1
 
             if current_plan is None:
-                if plan_completed:
+                if plan_completed and current_goal is not None:
                     current_frontier = []
-                    current_state = RobotState.UPDATING
+                    current_plan = current_goal
+                    current_goal = None
+                    current_state = RobotState.MOVING
                     rtt_iters = 0
                 else:
                     rtt_iters += 1
                     if rtt_iters >= max_rtt_iters:
+                        logging.info("Max RTT Iterations reached: Entering State END")
                         current_state = RobotState.END
 
             else:
@@ -161,12 +174,16 @@ def main(dir_path):
             robot_pos = env.robots[0].get_position()[:2]
             total_distance += np.linalg.norm(robot_pos - current_plan[:2])
             teleport(env, current_plan)
-            current_state = RobotState.PLANNING
+            if current_goal is None:
+                current_state = RobotState.UPDATING
+            else:
+                current_state = RobotState.PLANNING
 
         elif current_state is RobotState.UPDATING:
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
+            rt_rrt_star.map = occupancy_map
             with open(csv_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)
                 entry = [total_distance, occupancy_map.explored_space()]

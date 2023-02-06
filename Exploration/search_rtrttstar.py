@@ -183,6 +183,7 @@ def main(dir_path):
                         current_state = RobotState.END
 
             else:
+                rtt_iters = 0
                 current_state = RobotState.MOVING
 
         elif current_state is RobotState.MOVING:
@@ -216,6 +217,7 @@ def main(dir_path):
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
+            rt_rrt_star.map = occupancy_map
             with open(csv_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)
                 entry = [

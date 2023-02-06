@@ -231,7 +231,7 @@ class OccupancyGrid2D:
         cv2.circle(
             img=filter,
             center=[int(pos_in_map[1]), int(pos_in_map[0])],
-            radius=range_in_map,
+            radius=int(range_in_map),
             color=1,
             thickness=-1,
         )

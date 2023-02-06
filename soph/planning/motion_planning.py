@@ -24,6 +24,7 @@ class FrontierSelectionMethod(IntEnum):
     CLOSEST_GRAPH_SIMPLE = 2
     CLOSEST_GRAPH_VISIBLE = 3
     BESTINFO = 4
+    FUSION = 5
 
 
 def plan_base_motion(

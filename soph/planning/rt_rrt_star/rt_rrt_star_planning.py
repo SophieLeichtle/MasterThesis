@@ -21,7 +21,14 @@ from soph import DEFAULT_FOOTPRINT_RADIUS
 from igibson.utils.constants import OccupancyGridState
 
 
-def next_goal(env, occupancy_map, rt_rrt_star, method, require_line_of_sight=False):
+def next_goal(
+    env,
+    occupancy_map,
+    rt_rrt_star,
+    method,
+    require_line_of_sight=False,
+    fusion_weights=(0.7, 0.3),
+):
     frontier_lines = extract_frontiers(occupancy_map.grid)
     frontiers = []
 
@@ -63,6 +70,29 @@ def next_goal(env, occupancy_map, rt_rrt_star, method, require_line_of_sight=Fal
             gain = frontier_information_gain(occupancy_map, frontier, 3.5)
             frontiers.append((frontier, gain, None))
         frontiers.sort(key=lambda x: x[1], reverse=True)
+
+    if method is FrontierSelectionMethod.FUSION:
+        temp = []
+        max_gain = 0
+        min_gain = np.inf
+        max_dist = 0
+        min_dist = np.inf
+        for frontier in frontier_lines:
+            if len(frontier) < 10:
+                continue
+            gain = frontier_information_gain(occupancy_map, frontier, 3.5)
+            max_gain = max(gain, max_gain)
+            min_gain = min(gain, min_gain)
+            dist = frontier_distance_direct(env, occupancy_map, frontier)
+            max_dist = max(dist, max_dist)
+            min_dist = min(dist, min_dist)
+            temp.append((frontier, dist, gain))
+        for frontier, dist, gain in temp:
+            f_d = (dist - min_dist) / (max_dist - min_dist)
+            f_g = (gain - min_gain) / (max_gain - min_gain)
+            cost = fusion_weights[0] * f_d - fusion_weights[1] * f_g
+            frontiers.append((frontier, cost, None))
+        frontiers.sort(key=lambda x: x[1])
 
     for frontier, dist, closest_node in frontiers:
         goal = goal_from_frontier(

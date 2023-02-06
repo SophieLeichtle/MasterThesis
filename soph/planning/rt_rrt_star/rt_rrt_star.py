@@ -63,13 +63,13 @@ class NodeClusters:
     def getNodesAdjacent(self, node, min_radius=1, max_radius=5):
         nodes = []
         key = self.nodeToKey(node)
-        radius = 0
-        while radius < min_radius or (len(nodes) == 0 and radius < max_radius):
-            radius += 1
+        radius = min_radius
+        while len(nodes) == 0 and radius < max_radius:
             for i in range(-radius, radius + 1):
                 for j in range(-radius, radius + 1):
                     if (key[0] + i, key[1] + j) in self.clusters:
                         nodes.extend(self.clusters[(key[0] + i, key[1] + j)])
+            radius += 1
         return nodes
 
     def addNode(self, node):

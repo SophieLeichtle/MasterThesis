@@ -28,14 +28,14 @@ def frontier_distance_visible(frontier, occupancy_map, rt_rrt_star, max_iters=5)
 
     while iter < max_iters and closest_node is None:
         adjacent_nodes = rt_rrt_star.node_clusters.getNodesAdjacent(
-            frontier_node, min_radius=iter - 1, max_radius=iter
+            frontier_node, min_radius=iter
         )
         if len(adjacent_nodes) == 0:
             iter += 1
             continue
 
         for node in adjacent_nodes:
-            dist = rt_rrt_star.costRecursive(node) + node.distance_direct(frontier_node)
+            dist = node.distance_direct(frontier_node)
             if dist >= best_dist:
                 continue
             pos_in_map = occupancy_map.m_to_px(node.position()).astype(np.int32)
@@ -48,4 +48,4 @@ def frontier_distance_visible(frontier, occupancy_map, rt_rrt_star, max_iters=5)
                 best_dist = dist
                 closest_node = node
         iter += 1
-    return best_dist, closest_node
+    return rt_rrt_star.costRecursive(node) + best_dist, closest_node
