@@ -1,5 +1,10 @@
 import numpy as np
 from soph.utils.pcd_dict import PointCloudDict
+import logging
+from soph.utils.utils import bbox, px_to_3d, openglf_to_wf, center_ransac
+from soph.planning.motion_planning import (
+    get_poi,
+)
 
 
 class DetectionTool:
@@ -30,13 +35,13 @@ class DetectionTool:
         """
         self.pois = list(filter(lambda x: not self.is_similar(state, x), self.pois))
 
-    def register_definitive_detection(self, points):
+    def register_definitive_detection(self, points, center):
         """
         Register a new definitive detection given a set of detected points.
         Checks if points are already detected. If so, return None, else return new Detection.
         :param points: List of Points making up a new detection
         """
-        if self.already_detected(points):
+        if self.already_detected(points, center):
             return None
         new_detection = DefinitiveDetection(points)
         self.definitive_detections.append(new_detection)
@@ -69,19 +74,17 @@ class DetectionTool:
                 return False
         return True
 
-    def already_detected(self, points):
+    def already_detected(self, points, center):
         """
         Check if points belong to an already registered detection
         :param points: points to be checked
         """
-        center = np.average(np.vstack(points), axis=0)
-        print(center)
         for def_detection in self.definitive_detections:
             if def_detection.equivalent_point(center[:2]):
                 # def_detection.extend(points)
                 return True
-            if def_detection.contains(points):
-                return True
+            # if def_detection.contains(points):
+            # return True
         return False
 
     def closest_poi(self, position):
@@ -97,6 +100,55 @@ class DetectionTool:
                 dist2 = new_d2
                 closest = poi
         return closest
+
+    def matches_detection(self, detection):
+        for def_detection in self.definitive_detections:
+            if def_detection.would_detect(detection):
+                return True
+        return False
+
+    def process_detections(self, env, detections, masks):
+        state = env.get_state()
+        depth = state["depth"]
+
+        new_detection = False
+
+        for detection, mask in zip(detections, masks):
+            if self.matches_detection(detection):
+                continue
+            masked_depth = depth[:, :, 0] * mask
+            if np.count_nonzero(masked_depth) > 50:
+                rmin, rmax, cmin, cmax = bbox(masked_depth)
+                points = []
+                t_mat = openglf_to_wf(env.robots[0])
+                for row in range(rmin, rmax + 1):
+                    for col in range(cmin, cmax + 1):
+                        d = masked_depth[row, col]
+                        if d == 0:
+                            continue
+                        point = px_to_3d(row, col, d, t_mat, env.config["depth_high"])
+                        if point[2] > 0.05:
+                            points.append(point)
+                center, inliers = center_ransac(points)
+                new_detection = self.register_definitive_detection(inliers, center)
+                if new_detection is not None:
+                    logging.info(
+                        "New Detection Located at %.2f, %.2f",
+                        new_detection.position[0],
+                        new_detection.position[1],
+                    )
+                    new_detection = True
+            else:
+                poi = get_poi(detection)
+                new = self.register_new_poi(poi)
+                if new:
+                    logging.info(
+                        "Object Detected: New POI added at %.2f, %.2f",
+                        poi[0],
+                        poi[1],
+                    )
+
+        return new_detection
 
 
 class DefinitiveDetection:
@@ -163,4 +215,4 @@ class DefinitiveDetection:
         if a < 0:
             return False
         dist = (x_0 + a * u_0 - p_x) / v_0
-        return dist < self.similarity_threshold
+        return dist < 0.25

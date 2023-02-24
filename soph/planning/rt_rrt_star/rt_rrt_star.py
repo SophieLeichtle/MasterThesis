@@ -60,16 +60,16 @@ class NodeClusters:
             return self.clusters[key]
         return []
 
-    def getNodesAdjacent(self, node, max_radius=5):
+    def getNodesAdjacent(self, node, min_radius=1, max_radius=5):
         nodes = []
         key = self.nodeToKey(node)
-        radius = 0
+        radius = min_radius
         while len(nodes) == 0 and radius < max_radius:
-            radius += 1
             for i in range(-radius, radius + 1):
                 for j in range(-radius, radius + 1):
                     if (key[0] + i, key[1] + j) in self.clusters:
                         nodes.extend(self.clusters[(key[0] + i, key[1] + j)])
+            radius += 1
         return nodes
 
     def addNode(self, node):
@@ -119,20 +119,24 @@ class RTRRTstar:
             self.expandAndRewire()
 
     # Algorithm 1: RT-RRT*
-    def nextIter(self, robot_pos, robot_theta, occupancy_map, new_goal=None):
+    def nextIter(
+        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.01
+    ):
         # Update to most up-to-date map
         self.map = occupancy_map
         # Update Goal
         if new_goal is not None:
             self.setGoalNode(new_goal)
         # Expand and Rewire as long as time is left
-        self.expandAndRewire()
+        start_time = time.process_time()
+        while time.process_time() - start_time < max_time:
+            self.expandAndRewire(max_time + start_time - time.process_time())
         self.updateNextBestPath()
         while np.linalg.norm(robot_pos - self.current_path[0].position()) < 0.05:
             if len(self.current_path) > 1:
                 self.current_path.pop(0)
                 self.changeRoot(self.current_path[0])
-            if len(self.current_path) == 1:
+            elif len(self.current_path) == 1:
                 if self.isPathToGoalAvailable():
                     return None, True
                 else:
@@ -206,7 +210,7 @@ class RTRRTstar:
         d = self.dummy_goal_node.distance_direct(closest_to_goal)
 
         path = []
-        if d < threshold:
+        if d < threshold and self.lineOfSight(closest_to_goal, self.dummy_goal_node):
             n = closest_to_goal
             while n is not None:
                 path.insert(0, n)
@@ -246,7 +250,11 @@ class RTRRTstar:
         if p_r > 1 - alpha:
             vec = self.dummy_goal_node.position() - self.root.position()
             p_v = random.uniform(0, 1)
-            pos = self.root.position() + p_v * vec
+            pos = (
+                self.root.position()
+                + p_v * vec
+                + np.array([random.uniform(-0.25, 0.25), random.uniform(-0.25, 0.25)])
+            )
         elif p_r <= (1 - alpha) / beta or not self.isPathToGoalAvailable():
             pos = self.map.sample_uniform()
         else:
@@ -298,7 +306,7 @@ class RTRRTstar:
     def findNodesNear(self, node, adjacent_nodes):
         epsilon = max(
             np.sqrt(
-                self.node_clusters.searchSpace()
+                self.map.free_space()
                 * self.k_max
                 / (np.pi * self.node_clusters.totalNodes())
             ),

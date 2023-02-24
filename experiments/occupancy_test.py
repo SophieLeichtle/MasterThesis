@@ -22,7 +22,7 @@ from soph.environments.custom_env import CustomEnv
 from soph.utils.utils import pixel_to_point
 from soph import configs_path
 
-from soph.utils.motion_planning import plan_base_motion
+from soph.planning.motion_planning import plan_base_motion
 
 
 class RobotState(IntEnum):

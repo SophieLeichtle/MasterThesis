@@ -14,7 +14,7 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import (
+from soph.planning.motion_planning import (
     frontier_plan_bestinfo,
     teleport,
     frontier_plan_detection,

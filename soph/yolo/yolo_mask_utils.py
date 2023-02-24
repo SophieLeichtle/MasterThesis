@@ -19,16 +19,17 @@ from detectron2.layers import paste_masks_in_image
 import torchvision
 import time
 from torch.nn import functional as F
+import os
 
 
 @torch.no_grad()
-def create_model():
+def create_model(directory="yolo_files"):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    with open("yolo/hyp.scratch.mask.yaml") as f:
+    with open(os.path.join(directory, "hyp.scratch.mask.yaml")) as f:
         hyp = yaml.load(f, Loader=yaml.FullLoader)
 
-    weights = torch.load("yolo/yolov7-mask.pt")
+    weights = torch.load(os.path.join(directory, "yolov7-mask.pt"))
     model = weights["model"]
     model.half().to(device)
     _ = model.eval()
@@ -119,7 +120,7 @@ def save_seg_image(path, img_tensor, pred, pred_masks, hyp, names):
     pnimg = nimg.copy()
 
     for one_mask, bbox, cls, conf in zip(pred_masks_np, nbboxes, pred_cls, pred_conf):
-        if conf < 0.25:
+        if conf < 0.6:
             continue
         color = [np.random.randint(255), np.random.randint(255), np.random.randint(255)]
         pnimg[one_mask] = pnimg[one_mask] * 0.5 + np.array(color, dtype=np.uint8) * 0.5
@@ -206,7 +207,7 @@ def get_detections(env, model, device, hyp, label, save_image=False):
     pred_conf = predictions[:, 4].detach().cpu().numpy()
     indexes = []
     for i in range(len(pred_cls)):
-        if pred_conf[i] < 0.6:
+        if pred_conf[i] < 0.7:
             continue
         if names[int(pred_cls[i])] == label:
             indexes.append(i)

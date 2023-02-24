@@ -14,7 +14,7 @@ from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 
-from soph.utils.motion_planning import (
+from soph.planning.motion_planning import (
     dry_run_base_plan,
     extract_frontiers,
     plan_base_motion,

@@ -5,8 +5,9 @@ import yaml
 import numpy as np
 import cv2
 import time
+import csv
 
-from ..yolo.yolo_mask_utils import create_model, get_detections
+from soph.yolo.yolo_mask_utils import create_model, get_detections
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
@@ -18,29 +19,19 @@ from soph.occupancy_grid.occupancy_utils import (
 )
 
 from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
-from soph.planning.rt_rrt_star.rt_rrt_star_utils import (
+from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
     closest_frontier,
-    closest_frontier_poi,
     goal_from_poi,
+    next_goal,
 )
 
-from soph.utils.motion_planning import (
-    teleport,
-    get_poi,
-    plan_with_poi,
-    plan_base_motion,
-    frontier_plan_with_nav,
-    sample_plan_poi,
-)
+from soph.planning.motion_planning import teleport, get_poi, FrontierSelectionMethod
 from soph.utils.logging_utils import (
-    save_map,
     initiate_logging,
-    save_nav_map,
-    save_map_combo,
     save_map_rt_rrt_star,
 )
 from soph.utils.utils import bbox, px_to_3d, openglf_to_wf
-from soph.utils.nav_graph import NavGraph
+from soph.planning.nav_graph.nav_graph import NavGraph
 
 
 from soph.utils.detection_tool import DetectionTool
@@ -61,7 +52,7 @@ def main(dir_path):
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = os.path.join(configs_path, "seg_explore copy.yaml")
+    config_filename = os.path.join(configs_path, "beechwood.yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     queried_semantic = "chair"
@@ -100,6 +91,9 @@ def main(dir_path):
     planning_attempts = 0
     max_planning_attempts = 50
 
+    rtt_iters = 0
+    max_rtt_iters = 1000
+
     iters = 0
     file_name = os.path.join(dir_path, f"{iters:05d}.png")
     save_map_rt_rrt_star(file_name, robot_pos, occupancy_map, rt_rrt_star)
@@ -107,15 +101,23 @@ def main(dir_path):
 
     total_distance = 0
 
-    start_time = time.process_time()
+    csv_file = os.path.join(dir_path, "stats.csv")
+    with open(csv_file, "w") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        fields = ["Distance", "Explored", "Found"]
+        csvwriter.writerow(fields)
+        entry = [
+            total_distance,
+            occupancy_map.explored_space(),
+            len(detection_tool.definitive_detections),
+        ]
+        csvwriter.writerow(entry)
 
     frames = 0
     while True:
         frames += 1
         if frames >= 30:
             frames = 0
-            start_time = time.process_time()
-
             file_name = os.path.join(dir_path, f"{iters:05d}.png")
             save_map_rt_rrt_star(
                 file_name,
@@ -139,7 +141,13 @@ def main(dir_path):
                 planning_attempts += 1
                 if len(detection_tool.pois) == 0:
 
-                    goal, frontier = closest_frontier(occupancy_map, rt_rrt_star)
+                    goal, frontier = next_goal(
+                        env,
+                        occupancy_map,
+                        rt_rrt_star,
+                        FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
+                        True,
+                    )
 
                 else:
                     closest_poi = detection_tool.closest_poi(robot_pos)
@@ -153,25 +161,33 @@ def main(dir_path):
                     current_frontier = frontier
                     planning_attempts = 0
                 else:
+                    logging.info("Planning attempt %i", planning_attempts)
                     if planning_attempts == max_planning_attempts:
                         current_state = RobotState.END
-                    continue
+                        continue
 
             current_plan, plan_completed = rt_rrt_star.nextIter(
                 robot_pos, robot_theta, occupancy_map, new_goal
             )
 
             if current_plan is None:
-                if plan_completed:
+                if plan_completed and current_goal is not None:
                     current_frontier = []
                     current_plan = current_goal
                     current_goal = None
                     current_state = RobotState.MOVING
+                    rtt_iters = 0
+                else:
+                    rtt_iters += 1
+                    if rtt_iters >= max_rtt_iters:
+                        current_state = RobotState.END
 
             else:
+                rtt_iters = 0
                 current_state = RobotState.MOVING
 
         elif current_state is RobotState.MOVING:
+
             robot_pos = env.robots[0].get_position()[:2]
             total_distance += np.linalg.norm(robot_pos - current_plan[:2])
             teleport(env, current_plan)
@@ -181,48 +197,16 @@ def main(dir_path):
                 env, model, device, hyp, queried_semantic, True
             )
             if detections is not None:
-                state = env.get_state()
-                depth = state["depth"]
-                for detection, mask in zip(detections, masks):
-                    masked_depth = depth[:, :, 0] * mask
-                    if np.count_nonzero(masked_depth) > 50:
-                        rmin, rmax, cmin, cmax = bbox(masked_depth)
-                        points = []
-                        t_mat = openglf_to_wf(env.robots[0])
-                        for row in range(rmin, rmax + 1):
-                            for col in range(cmin, cmax + 1):
-                                d = masked_depth[row, col]
-                                if d == 0:
-                                    continue
-                                point = px_to_3d(
-                                    row, col, d, t_mat, env.config["depth_high"]
-                                )
-                                if point[2] > 0.05:
-                                    points.append(point)
 
-                        new_detection = detection_tool.register_definitive_detection(
-                            points
-                        )
-                        if new_detection is not None:
-                            logging.info(
-                                "New Detection Located at %.2f, %.2f",
-                                new_detection.position[0],
-                                new_detection.position[1],
-                            )
-                            current_goal = None
-                            current_state = RobotState.UPDATING
-                            logging.info("Current Plan Aborted")
-                            logging.info("Entering State: UPDATING")
-                    else:
-                        poi = get_poi(detection)
-                        new = detection_tool.register_new_poi(poi)
-                        if new:
-                            logging.info(
-                                "Object Detected: New POI added at %.2f, %.2f",
-                                poi[0],
-                                poi[1],
-                            )
-                            update_grid_with_scan(env, occupancy_map)
+                new_detection = detection_tool.process_detections(
+                    env, detections, masks
+                )
+
+                if new_detection:
+                    current_goal = None
+                    current_state = RobotState.UPDATING
+                    logging.info("Current Plan Aborted")
+                    logging.info("Entering State: UPDATING")
 
             if current_goal is None or current_state == RobotState.UPDATING:
                 current_state = RobotState.UPDATING
@@ -233,6 +217,16 @@ def main(dir_path):
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
+            rt_rrt_star.map = occupancy_map
+            with open(csv_file, "a") as csvfile:
+                csvwriter = csv.writer(csvfile)
+                entry = [
+                    total_distance,
+                    occupancy_map.explored_space(),
+                    len(detection_tool.definitive_detections),
+                ]
+                csvwriter.writerow(entry)
+
             current_state = RobotState.PLANNING
             logging.info("Entering State: PLANNING")
             # input("enter")
@@ -254,5 +248,5 @@ def main(dir_path):
 
 
 if __name__ == "__main__":
-    dir_path = initiate_logging("inseg_exploration.log")
+    dir_path = initiate_logging("exploration.log")
     main(dir_path)

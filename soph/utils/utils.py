@@ -1,6 +1,7 @@
 import numpy as np
 from igibson.utils.mesh_util import quat2rotmat, xyzw2wxyz
 from transforms3d.euler import euler2quat
+import random
 
 
 def bbox(img):
@@ -82,3 +83,18 @@ def check_detections_for_viewpoints(detections):
         if abs(delta_theta) > np.pi / 12:
             return True
     return False
+
+
+def center_ransac(points, threshold=0.5, n=10, iters=30):
+    best_inliers = []
+    for i in range(iters):
+        samples = random.sample(points, n)
+        center = np.average(np.vstack(samples), axis=0)
+        inliers = []
+        for p in points:
+            if np.linalg.norm(p - center) <= threshold:
+                inliers.append(p)
+        if len(inliers) > len(best_inliers):
+            best_inliers = inliers
+    best_center = np.average(np.vstack(best_inliers), axis=0)
+    return best_center, best_inliers
