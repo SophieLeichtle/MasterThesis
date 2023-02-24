@@ -1,5 +1,9 @@
 import numpy as np
+import cv2
+import os
 
+from soph import configs_path
+from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
 from soph.occupancy_grid.occupancy_from_scan import get_local_occupancy_grid
 from soph import DEFAULT_FOOTPRINT_RADIUS
 from soph.planning.motion_planning import teleport
@@ -53,3 +57,18 @@ def refine_map(occupancy_map):
     outline = free ^ free_refined
 
     occupancy_map.grid[outline] = OccupancyGridState.UNKNOWN
+
+
+def initial_position(area, gridsize=350):
+    filename = os.path.join(configs_path, area + ".png")
+    mapread = cv2.imread(filename)
+    mapprocessed = np.round(cv2.cvtColor(mapread, cv2.COLOR_BGR2GRAY) / 255 * 2) / 2
+    grid = OccupancyGrid2D(gridsize)
+    grid.grid = mapprocessed
+
+    while True:
+        sample = grid.sample_uniform()
+        if grid.check_if_free(sample, DEFAULT_FOOTPRINT_RADIUS * 1.25):
+            break
+
+    return [sample[0], sample[1], 0]

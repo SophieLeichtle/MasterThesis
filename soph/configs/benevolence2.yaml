@@ -1,7 +1,7 @@
 # scene
 scene: igibson
-scene_id: Benevolence_2_int
-urdf_file: Benevolence_2_int
+scene_id: Benevolence_1_int
+urdf_file: Benevolence_1_int
 build_graph: true
 load_texture: true
 pybullet_load_texture: true

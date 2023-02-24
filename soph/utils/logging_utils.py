@@ -5,10 +5,13 @@ import time
 from soph import logs_path, DEFAULT_FOOTPRINT_RADIUS
 
 
-def initiate_logging(log_name):
+def initiate_logging(log_name, sub_dir=None):
     datestr = time.strftime("%Y-%m-%d")
     timestr = time.strftime("%H-%M-%S")
-    log_dir = os.path.join(logs_path, datestr, timestr)
+    if sub_dir is None:
+        log_dir = os.path.join(logs_path, datestr, timestr)
+    else:
+        log_dir = os.path.join(logs_path, datestr, sub_dir, timestr)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
     filename = os.path.join(log_dir, log_name)

@@ -120,7 +120,7 @@ class RTRRTstar:
 
     # Algorithm 1: RT-RRT*
     def nextIter(
-        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.1
+        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.01
     ):
         # Update to most up-to-date map
         self.map = occupancy_map

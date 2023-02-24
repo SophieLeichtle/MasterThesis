@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from memory_profiler import profile
 
 from soph.planning.frontiers.frontier_utils import (
     frontier_distance_direct,
@@ -13,6 +14,7 @@ from soph.planning.nav_graph.nav_graph_utils import (
 )
 
 
+@profile
 def next_frontier(env, occupancy_map, nav_graph, method, fusion_weights=(0.7, 0.3)):
     frontier_lines = extract_frontiers(occupancy_map.grid)
     frontiers = []
@@ -75,9 +77,16 @@ def next_frontier(env, occupancy_map, nav_graph, method, fusion_weights=(0.7, 0.
             max_dist = max(dist, max_dist)
             min_dist = min(dist, min_dist)
             temp.append((frontier, dist, gain))
+
+        dist_diff = max_dist - min_dist
+        if dist_diff == 0:
+            dist_diff = 1
+        gain_diff = max_gain - min_gain
+        if gain_diff == 0:
+            gain_diff = 1
         for frontier, dist, gain in temp:
-            f_d = (dist - min_dist) / (max_dist - min_dist)
-            f_g = (gain - min_gain) / (max_gain - min_gain)
+            f_d = (dist - min_dist) / dist_diff
+            f_g = (gain - min_gain) / gain_diff
             cost = fusion_weights[0] * f_d - fusion_weights[1] * f_g
             frontiers.append((frontier, cost, None))
         frontiers.sort(key=lambda x: x[1])
@@ -129,6 +138,8 @@ def frontier_plan_with_nav(env, occupancy_map, nav_graph):
 
 
 def plan_from_frontier(robot_pos, robot_theta, frontier, closest_node, occupancy_map):
+    if np.linalg.norm(np.array(frontier[0]) - np.array(frontier[-1])) < 10:
+        return None, None
     if closest_node is None:
         plan = plan_to_frontier(
             [robot_pos[0], robot_pos[1], robot_theta], occupancy_map, frontier

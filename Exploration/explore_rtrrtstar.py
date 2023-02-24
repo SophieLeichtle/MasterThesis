@@ -5,11 +5,17 @@ import yaml
 import numpy as np
 import time
 import csv
+import argparse
+
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
-from soph.occupancy_grid.occupancy_utils import spin_and_update, refine_map
+from soph.occupancy_grid.occupancy_utils import (
+    spin_and_update,
+    refine_map,
+    initial_position,
+)
 
 from soph.planning.rt_rrt_star.rt_rrt_star import RTRRTstar
 from soph.planning.rt_rrt_star.rt_rrt_star_planning import (
@@ -34,13 +40,13 @@ class RobotState(IntEnum):
     END = 4
 
 
-def main(dir_path):
+def main(dir_path, config, frontier_method):
     """
     Create an igibson environment.
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = os.path.join(configs_path, "beechwood.yaml")
+    config_filename = os.path.join(configs_path, config + ".yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
 
     # Create Environment
@@ -48,7 +54,6 @@ def main(dir_path):
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
     env.reset()
 
-    frontier_method = FrontierSelectionMethod.FUSION
     logging.info("Frontier Selection Method: %s", frontier_method.name)
 
     # Create Map
@@ -56,6 +61,12 @@ def main(dir_path):
 
     logging.info("Entering State: INIT")
     current_state = RobotState.INIT
+
+    init_pos = initial_position(config)
+    env.land(env.robots[0], init_pos, env.robots[0].get_rpy())
+
+    # Create Map
+    occupancy_map = OccupancyGrid2D(half_size=350)
 
     # Initial Map Update
     spin_and_update(env, occupancy_map)
@@ -76,10 +87,13 @@ def main(dir_path):
     max_planning_attempts = 30
 
     rtt_iters = 0
+    spin_iters = 100
     max_rtt_iters = 1000
 
+    os.makedirs(os.path.join(dir_path, "images"))
+
     iters = 0
-    file_name = os.path.join(dir_path, f"{iters:05d}.png")
+    file_name = os.path.join(dir_path, "images", f"{iters:05d}.png")
     save_map_rt_rrt_star(file_name, robot_pos, occupancy_map, rt_rrt_star)
     iters += 1
 
@@ -90,21 +104,31 @@ def main(dir_path):
     # detailed_iters += 1
 
     total_distance = 0
-    csv_file = os.path.join(dir_path, "stats.csv")
+    exploration_stats_file = os.path.join(dir_path, "exploration_stats.csv")
+    planning_stats_file = os.path.join(dir_path, "planning_stats.csv")
 
-    with open(csv_file, "w") as csvfile:
+    with open(exploration_stats_file, "w") as csvfile:
         csvwriter = csv.writer(csvfile)
         fields = ["Distance", "Explored"]
         csvwriter.writerow(fields)
         entry = [total_distance, occupancy_map.explored_space()]
         csvwriter.writerow(entry)
+    with open(planning_stats_file, "w") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        fields = ["Type", "Time", "Found"]
+        csvwriter.writerow(fields)
+
+    start_time = time.process_time()
 
     frames = 0
     while True:
+        # cap at 30 minutes
+        if time.process_time() - start_time > 1800:
+            current_state = RobotState.END
         frames += 1
         if frames >= 30:
             frames = 0
-            file_name = os.path.join(dir_path, f"{iters:05d}.png")
+            file_name = os.path.join(dir_path, "images", f"{iters:05d}.png")
             save_map_rt_rrt_star(
                 file_name,
                 robot_pos,
@@ -124,15 +148,24 @@ def main(dir_path):
 
             new_goal = None
             if current_goal is None:
+                logging.info("Making new plan")
                 planning_attempts += 1
+                t = time.process_time()
                 goal, frontier = next_goal(
                     env,
                     occupancy_map,
                     rt_rrt_star,
                     frontier_method,
-                    True,
+                    frontier_method == FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE,
                 )
+                t = time.process_time() - t
+                with open(planning_stats_file, "a") as csvfile:
+                    csvwriter = csv.writer(csvfile)
+                    entry = ["frontier", t, goal is not None]
+                    csvwriter.writerow(entry)
+
                 if goal is not None:
+                    logging.info("New goal at %.2f , %.2f", goal[0], goal[1])
                     new_goal = goal[:2]
                     current_goal = goal
                     current_frontier = frontier
@@ -145,10 +178,15 @@ def main(dir_path):
                         )
                         current_state = RobotState.END
                         continue
-
+            t = time.process_time()
             current_plan, plan_completed = rt_rrt_star.nextIter(
                 robot_pos, robot_theta, occupancy_map, new_goal
             )
+            t = time.process_time() - t
+            with open(planning_stats_file, "a") as csvfile:
+                csvwriter = csv.writer(csvfile)
+                entry = ["iter", t, True]
+                csvwriter.writerow(entry)
             # file_name = os.path.join(dir_path, "detailed", f"{detailed_iters:05d}.png")
             # save_map_rt_rrt_star_detailed(file_name, occupancy_map, rt_rrt_star)
             # detailed_iters += 1
@@ -162,6 +200,11 @@ def main(dir_path):
                     rtt_iters = 0
                 else:
                     rtt_iters += 1
+                    if rtt_iters == spin_iters:
+                        logging.info(
+                            "RTT Iterations reached Spin Threshold: Updating Map Once"
+                        )
+                        current_state = RobotState.UPDATING
                     if rtt_iters >= max_rtt_iters:
                         logging.info("Max RTT Iterations reached: Entering State END")
                         current_state = RobotState.END
@@ -184,7 +227,7 @@ def main(dir_path):
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
             rt_rrt_star.map = occupancy_map
-            with open(csv_file, "a") as csvfile:
+            with open(exploration_stats_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)
                 entry = [total_distance, occupancy_map.explored_space()]
                 csvwriter.writerow(entry)
@@ -194,7 +237,7 @@ def main(dir_path):
 
         elif current_state is RobotState.END:
             robot_pos = env.robots[0].get_position()[:2]
-            file_name = os.path.join(dir_path, f"{iters:05d}.png")
+            file_name = os.path.join(dir_path, "final.png")
             save_map_rt_rrt_star(
                 file_name, robot_pos, occupancy_map, rt_rrt_star, None, current_frontier
             )
@@ -202,5 +245,32 @@ def main(dir_path):
 
 
 if __name__ == "__main__":
-    dir_path = initiate_logging("exploration.log")
-    main(dir_path)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        choices=["beechwood", "wainscott", "ihlen", "benevolence0", "benevolence2"],
+    )
+    parser.add_argument(
+        "-m",
+        "--method",
+        choices=["random", "euclid", "simple", "visible", "info", "fusion"],
+    )
+    args = parser.parse_args()
+    if args.method == "random":
+        m = FrontierSelectionMethod.RANDOM
+    if args.method == "euclid":
+        m = FrontierSelectionMethod.CLOSEST_EUCLID
+    if args.method == "visible":
+        m = FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE
+    if args.method == "simple":
+        m = FrontierSelectionMethod.CLOSEST_GRAPH_SIMPLE
+    if args.method == "info":
+        m = FrontierSelectionMethod.BESTINFO
+    if args.method == "fusion":
+        m = FrontierSelectionMethod.FUSION
+
+    dir_path = initiate_logging(
+        "exploration.log", args.config + "/" + args.method + "/rtrrtstar"
+    )
+    main(dir_path, args.config, m)

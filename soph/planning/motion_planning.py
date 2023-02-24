@@ -12,6 +12,7 @@ from igibson.external.pybullet_tools.utils import (
 import logging
 from igibson.utils.constants import OccupancyGridState
 
+from memory_profiler import profile
 import time
 from enum import IntEnum
 from soph import DEFAULT_FOOTPRINT_RADIUS
@@ -212,6 +213,7 @@ def plan_with_poi(env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, verbose=F
     return plan, []
 
 
+@profile
 def sample_plan_poi(
     env, map, poi, base_radius=DEFAULT_FOOTPRINT_RADIUS, n=10, verbose=False
 ):

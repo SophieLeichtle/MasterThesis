@@ -5,12 +5,16 @@ import yaml
 import numpy as np
 import time
 import csv
+import argparse
 
 from soph import configs_path
 from soph.environments.custom_env import CustomEnv
 from soph.occupancy_grid.occupancy_grid import OccupancyGrid2D
-from soph.occupancy_grid.occupancy_utils import spin_and_update, refine_map
-
+from soph.occupancy_grid.occupancy_utils import (
+    spin_and_update,
+    refine_map,
+    initial_position,
+)
 from soph.planning.nav_graph.nav_graph import NavGraph
 
 
@@ -40,16 +44,14 @@ class RobotState(IntEnum):
     END = 4
 
 
-def main(dir_path):
+def main(dir_path, config, frontier_method):
     """
     Create an igibson environment.
     The robot tries to perform a simple frontiers based exploration of the environment.
     """
     print("*" * 80 + "\nDescription:" + main.__doc__ + "*" * 80)
-    config_filename = os.path.join(configs_path, "beechwood.yaml")
+    config_filename = os.path.join(configs_path, config + ".yaml")
     config_data = yaml.load(open(config_filename, "r"), Loader=yaml.FullLoader)
-
-    frontier_method = FrontierSelectionMethod.RANDOM
 
     logging.info("Frontier Selection Method: %s", frontier_method.name)
 
@@ -58,11 +60,14 @@ def main(dir_path):
     env = CustomEnv(config_file=config_data, mode="gui_interactive")
     env.reset()
 
-    # Create Map
-    occupancy_map = OccupancyGrid2D(half_size=350)
-
     logging.info("Entering State: INIT")
     current_state = RobotState.INIT
+
+    init_pos = initial_position(config)
+    env.land(env.robots[0], init_pos, env.robots[0].get_rpy())
+
+    # Create Map
+    occupancy_map = OccupancyGrid2D(half_size=350)
 
     # Initial Map Update
     spin_and_update(env, occupancy_map)
@@ -87,7 +92,8 @@ def main(dir_path):
     os.makedirs(nav_dir)
     save_nav_map(nav_dir, occupancy_map, navigation_graph)
 
-    csv_file = os.path.join(dir_path, "stats.csv")
+    exploration_stats_file = os.path.join(dir_path, "exploration_stats.csv")
+    planning_stats_file = os.path.join(dir_path, "planning_stats.csv")
 
     logging.info("Entering State: PLANNING")
 
@@ -95,15 +101,22 @@ def main(dir_path):
     max_planning_attempts = 10
 
     total_distance = 0
-    with open(csv_file, "w") as csvfile:
+    with open(exploration_stats_file, "w") as csvfile:
         csvwriter = csv.writer(csvfile)
         fields = ["Distance", "Explored"]
         csvwriter.writerow(fields)
         entry = [total_distance, occupancy_map.explored_space()]
         csvwriter.writerow(entry)
+    with open(planning_stats_file, "w") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        fields = ["Type", "Time", "Found"]
+        csvwriter.writerow(fields)
 
+    start_time = time.process_time()
     while True:
-
+        # cap at 30 minutes
+        if time.process_time() - start_time > 1800:
+            current_state = RobotState.END
         if current_state is RobotState.PLANNING:
 
             planning_attempts += 1
@@ -112,12 +125,18 @@ def main(dir_path):
             if waypoints is None:
                 logging.info("Planning with Frontiers")
                 current_plan = None
+                t = time.process_time()
                 waypoints, frontier_plan, current_frontier = next_frontier(
                     env,
                     occupancy_map,
                     navigation_graph,
-                    FrontierSelectionMethod.RANDOM,
+                    frontier_method,
                 )
+                t = time.process_time() - t
+                with open(planning_stats_file, "a") as csvfile:
+                    csvwriter = csv.writer(csvfile)
+                    entry = ["frontier", t, waypoints != None]
+                    csvwriter.writerow(entry)
 
             if waypoints is not None:
                 if len(waypoints) == 0:
@@ -131,11 +150,17 @@ def main(dir_path):
                     theta = np.arctan2(
                         next_point[1] - robot_pos[1], next_point[0] - robot_pos[0]
                     )
+                    t = time.process_time()
                     current_plan = sample_plan_poi(
                         env,
                         occupancy_map,
                         np.array([next_point[0], next_point[1], theta]),
                     )
+                    t = time.process_time() - t
+                    with open(planning_stats_file, "a") as csvfile:
+                        csvwriter = csv.writer(csvfile)
+                        entry = ["waypoint", t, current_plan != None]
+                        csvwriter.writerow(entry)
 
             if current_plan is not None:
                 planning_attempts = 0
@@ -189,7 +214,7 @@ def main(dir_path):
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
             save_nav_map(nav_dir, occupancy_map, navigation_graph)
-            with open(csv_file, "a") as csvfile:
+            with open(exploration_stats_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)
                 entry = [total_distance, occupancy_map.explored_space()]
                 csvwriter.writerow(entry)
@@ -200,7 +225,7 @@ def main(dir_path):
         elif current_state is RobotState.END:
             env.step(None)
             save_map(
-                map_dir,
+                dir_path,
                 robot_pos,
                 occupancy_map,
                 current_plan=[],
@@ -222,5 +247,33 @@ def main(dir_path):
 
 
 if __name__ == "__main__":
-    dir_path = initiate_logging("exploration.log")
-    main(dir_path)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        choices=["beechwood", "wainscott", "ihlen", "benevolence0", "benevolence2"],
+    )
+    parser.add_argument(
+        "-m",
+        "--method",
+        choices=["random", "euclid", "simple", "visible", "info", "fusion"],
+    )
+    args = parser.parse_args()
+    if args.method == "random":
+        m = FrontierSelectionMethod.RANDOM
+    if args.method == "euclid":
+        m = FrontierSelectionMethod.CLOSEST_EUCLID
+    if args.method == "visible":
+        m = FrontierSelectionMethod.CLOSEST_GRAPH_VISIBLE
+    if args.method == "simple":
+        m = FrontierSelectionMethod.CLOSEST_GRAPH_SIMPLE
+    if args.method == "info":
+        m = FrontierSelectionMethod.BESTINFO
+    if args.method == "fusion":
+        m = FrontierSelectionMethod.FUSION
+
+    dir_path = initiate_logging(
+        "exploration.log", args.config + "/" + args.method + "/navgraph"
+    )
+    main(dir_path, args.config, m)

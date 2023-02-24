@@ -1,6 +1,7 @@
 # scene
 scene: igibson
 scene_id: Wainscott_0_int # Beechwood_1_int#Merom_0_int
+#urdf_file: Wainscott_0_int
 build_graph: true
 load_texture: true
 pybullet_load_texture: true

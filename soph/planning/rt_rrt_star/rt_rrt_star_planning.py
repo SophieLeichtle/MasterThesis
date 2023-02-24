@@ -87,9 +87,16 @@ def next_goal(
             max_dist = max(dist, max_dist)
             min_dist = min(dist, min_dist)
             temp.append((frontier, dist, gain))
+
+        dist_diff = max_dist - min_dist
+        if dist_diff == 0:
+            dist_diff = 1
+        gain_diff = max_gain - min_gain
+        if gain_diff == 0:
+            gain_diff = 1
         for frontier, dist, gain in temp:
-            f_d = (dist - min_dist) / (max_dist - min_dist)
-            f_g = (gain - min_gain) / (max_gain - min_gain)
+            f_d = (dist - min_dist) / dist_diff
+            f_g = (gain - min_gain) / gain_diff
             cost = fusion_weights[0] * f_d - fusion_weights[1] * f_g
             frontiers.append((frontier, cost, None))
         frontiers.sort(key=lambda x: x[1])
