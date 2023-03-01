@@ -72,34 +72,36 @@ def next_goal(
         frontiers.sort(key=lambda x: x[1], reverse=True)
 
     if method is FrontierSelectionMethod.FUSION:
-        temp = []
-        max_gain = 0
-        min_gain = np.inf
-        max_dist = 0
-        min_dist = np.inf
         for frontier in frontier_lines:
             if len(frontier) < 10:
                 continue
             gain = frontier_information_gain(occupancy_map, frontier, 3.5)
-            max_gain = max(gain, max_gain)
-            min_gain = min(gain, min_gain)
             dist = frontier_distance_direct(env, occupancy_map, frontier)
-            max_dist = max(dist, max_dist)
-            min_dist = min(dist, min_dist)
-            temp.append((frontier, dist, gain))
+            frontiers.append((frontier, dist, gain))
 
-        dist_diff = max_dist - min_dist
-        if dist_diff == 0:
-            dist_diff = 1
-        gain_diff = max_gain - min_gain
-        if gain_diff == 0:
-            gain_diff = 1
-        for frontier, dist, gain in temp:
-            f_d = (dist - min_dist) / dist_diff
-            f_g = (gain - min_gain) / gain_diff
-            cost = fusion_weights[0] * f_d - fusion_weights[1] * f_g
-            frontiers.append((frontier, cost, None))
-        frontiers.sort(key=lambda x: x[1])
+        max_dist = max(frontiers, key=lambda x: x[1])[1]
+        min_dist = min(frontiers, key=lambda x: x[1])[1]
+        max_gain = max(frontiers, key=lambda x: x[2])[2]
+        min_gain = min(frontiers, key=lambda x: x[2])[2]
+
+        def fusion_cost(weights, dist, gain, max_dist, min_dist, max_gain, min_gain):
+            f_d = (
+                (dist - min_dist) / (max_dist - min_dist)
+                if max_dist - min_dist != 0
+                else 0
+            )
+            f_g = (
+                (gain - min_gain) / (max_gain - min_gain)
+                if max_gain - min_gain != 0
+                else 0
+            )
+            return weights[0] * f_d - weights[1] * f_g
+
+        frontiers.sort(
+            key=lambda x: fusion_cost(
+                fusion_weights, x[1], x[2], max_dist, min_dist, max_gain, min_gain
+            )
+        )
 
     for frontier, dist, closest_node in frontiers:
         goal = goal_from_frontier(
@@ -141,7 +143,7 @@ def goal_from_frontier(
 
     for s in samples:
         if not occupancy_map.check_if_free(
-            np.array([s[0], s[1]]), DEFAULT_FOOTPRINT_RADIUS
+            np.array([s[0], s[1]]), 1.2 * DEFAULT_FOOTPRINT_RADIUS
         ):
             continue
         sample_node = Node(np.array([s[0], s[1]]), np.inf)

@@ -111,16 +111,16 @@ class RTRRTstar:
         self.current_path = []
         self.path_to_goal = False
 
-    def initiate(self, occupancy_map, max_time=1):
+    def initiate(self, robot_pos, occupancy_map, max_time=1):
         self.map = occupancy_map
-        self.setGoalNode(np.array([0, 0]))
+        self.setGoalNode(np.array(robot_pos))
         start = time.process_time()
         while time.process_time() - start < max_time:
             self.expandAndRewire()
 
     # Algorithm 1: RT-RRT*
     def nextIter(
-        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.01
+        self, robot_pos, robot_theta, occupancy_map, new_goal=None, max_time=0.02
     ):
         # Update to most up-to-date map
         self.map = occupancy_map
@@ -145,38 +145,6 @@ class RTRRTstar:
         diff = diff / np.linalg.norm(diff)
         theta = np.arctan2(diff[1], diff[0])
 
-        # ang_diff = theta - robot_theta
-        # if ang_diff > np.pi:
-        #     ang_diff -= 2 * np.pi
-        # if ang_diff < -np.pi:
-        #     ang_diff += 2 * np.pi
-        # if abs(ang_diff) > np.pi / 60:
-        #     return [
-        #         0,
-        #         -np.sign(ang_diff) * np.pi / 60,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #         0,
-        #     ], False
-        # return [
-        #     0.5,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        #     0,
-        # ], False
         return [
             robot_pos[0] + 0.05 * diff[0],
             robot_pos[1] + 0.05 * diff[1],
@@ -190,7 +158,8 @@ class RTRRTstar:
         adjacent_nodes = self.node_clusters.getNodesAdjacent(n_new)
         if len(adjacent_nodes) == 0:
             return
-        n_closest = self.getClosestNeighbor(n_new, adjacent_nodes)
+
+        n_closest = self.getClosestVisible(n_new, adjacent_nodes)
         if self.lineOfSight(n_new, n_closest):
             near = self.findNodesNear(n_new, adjacent_nodes)
             if len(near) < self.k_max or n_closest.distance_direct(n_new) > self.r_s:
@@ -206,7 +175,7 @@ class RTRRTstar:
     # Algorithm 6: Plan a Path for k Steps
     def updateNextBestPath(self, threshold=0.5, k=100):
         adjacent_nodes = self.node_clusters.getNodesAdjacent(self.dummy_goal_node)
-        closest_to_goal = self.getClosestNeighbor(self.dummy_goal_node, adjacent_nodes)
+        closest_to_goal = self.getClosestVisible(self.dummy_goal_node, adjacent_nodes)
         d = self.dummy_goal_node.distance_direct(closest_to_goal)
 
         path = []
@@ -294,14 +263,14 @@ class RTRRTstar:
         return x_rand
 
     def getClosestNeighbor(self, node, adjacent_nodes):
-        min_dist = np.inf
-        closest_neighbor = None
+        return min(adjacent_nodes, key=lambda x: node.distance_direct(x))
+
+    def getClosestVisible(self, node, adjacent_nodes):
+        adjacent_nodes.sort(key=lambda x: node.distance_direct(x))
         for n in adjacent_nodes:
-            d = node.distance_direct(n)
-            if d < min_dist:
-                min_dist = d
-                closest_neighbor = n
-        return closest_neighbor
+            if self.lineOfSight(n, node):
+                return n
+        return adjacent_nodes[0]
 
     def findNodesNear(self, node, adjacent_nodes):
         epsilon = max(
@@ -403,18 +372,6 @@ class RTRRTstar:
         return self.path_to_goal
 
     def lineOfSight(self, n_1, n_2, base_radius=DEFAULT_FOOTPRINT_RADIUS):
-
-        if self.map.check_if_free(n_1.position(), base_radius) is False:
-            return False
-        if self.map.check_if_free(n_2.position(), base_radius) is False:
-            return False
-
-        diff = n_2.position() - n_1.position()
-        pos = n_1.position()
-        n = int(np.ceil(np.linalg.norm(diff) / base_radius))
-        for i in range(0, n):
-            pos = pos + diff / n
-            if self.map.check_if_free(pos, base_radius) is False:
-                return False
-
-        return True
+        return self.map.line_of_sight_complex(
+            n_1.position(), n_2.position(), base_radius
+        )

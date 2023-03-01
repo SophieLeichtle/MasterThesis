@@ -196,7 +196,9 @@ def main(dir_path, config, frontier_method):
 
             robot_pos = env.robots[0].get_position()[:2]
 
-            navigation_graph.update_with_robot_pos(robot_pos, occupancy_map, 1.5)
+            navigation_graph.update_with_robot_pos(
+                robot_pos, occupancy_map, max_dist=1.5
+            )
             if len(current_plan) == 0:
                 current_plan = None
                 if waypoints is None:
@@ -213,6 +215,12 @@ def main(dir_path, config, frontier_method):
             logging.info("Current total distance: %.3f m", total_distance)
             spin_and_update(env, occupancy_map)
             refine_map(occupancy_map)
+
+            navigation_graph.update_with_robot_pos(
+                robot_pos, occupancy_map, endpoint=True, max_dist=1.5
+            )
+            navigation_graph.update_occlusions(occupancy_map, 3.5)
+
             save_nav_map(nav_dir, occupancy_map, navigation_graph)
             with open(exploration_stats_file, "a") as csvfile:
                 csvwriter = csv.writer(csvfile)

@@ -78,7 +78,7 @@ def main(dir_path):
 
     robot_pos = env.robots[0].get_position()[:2]
     rt_rrt_star = RTRRTstar(robot_pos)
-    rt_rrt_star.initiate(occupancy_map)
+    rt_rrt_star.initiate(robot_pos, occupancy_map)
 
     current_state = RobotState.PLANNING
 

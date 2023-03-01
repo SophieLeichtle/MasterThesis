@@ -73,7 +73,7 @@ def main(dir_path, config, frontier_method):
 
     robot_pos = env.robots[0].get_position()[:2]
     rt_rrt_star = RTRRTstar(robot_pos)
-    rt_rrt_star.initiate(occupancy_map)
+    rt_rrt_star.initiate(robot_pos, occupancy_map)
 
     current_state = RobotState.PLANNING
 
@@ -88,7 +88,7 @@ def main(dir_path, config, frontier_method):
 
     rtt_iters = 0
     spin_iters = 100
-    max_rtt_iters = 1000
+    max_rtt_iters = 2000
 
     os.makedirs(os.path.join(dir_path, "images"))
 

@@ -3,6 +3,7 @@ import random
 import cv2
 import matplotlib.pyplot as plt
 from soph.utils.utils import pixel_to_point, bbox
+from soph.utils.bresenham import plotLine
 from scipy.ndimage import binary_erosion, binary_dilation
 
 from igibson.utils.constants import OccupancyGridState
@@ -95,8 +96,11 @@ class OccupancyGrid2D:
 
                 if occupancy_grid[r][c] == OccupancyGridState.OBSTACLES:
                     rounded_point = [int(round(point[0])), int(round(point[1]))]
-                    self.grid[rounded_point[0], rounded_point[1]] = occupancy_grid[r][c]
+                    self.grid[
+                        rounded_point[0], rounded_point[1]
+                    ] = OccupancyGridState.OBSTACLES
                     continue
+
                 for x in np.floor(point[1]).astype(np.int32), np.ceil(point[1]).astype(
                     np.int32
                 ):
@@ -104,7 +108,7 @@ class OccupancyGrid2D:
                         point[0]
                     ).astype(np.int32):
                         if self.grid[y][x] != OccupancyGridState.OBSTACLES:
-                            self.grid[y][x] = occupancy_grid[r][c]
+                            self.grid[y][x] = OccupancyGridState.FREESPACE
 
     def update_with_points(self, points):
         """
@@ -240,12 +244,62 @@ class OccupancyGrid2D:
         return np.count_nonzero(points == OccupancyGridState.UNKNOWN)
 
     def line_of_sight(self, pos_in_map, goal_in_map):
-        length = int(1.5 * np.linalg.norm(pos_in_map - goal_in_map))
-        for i in range(0, length - 1):
-            point = pos_in_map * ((length - i) / length) + goal_in_map * (i / length)
-            if self.grid[int(point[0]), int(point[1])] == OccupancyGridState.OBSTACLES:
+
+        line = plotLine(
+            int(pos_in_map[0]),
+            int(pos_in_map[1]),
+            int(goal_in_map[0]),
+            int(goal_in_map[1]),
+        )
+        for point in line:
+            if self.grid[point[0], point[1]] == OccupancyGridState.OBSTACLES:
                 return False
         return True
+
+    def line_of_sight_complex(self, p1, p2, base_radius=DEFAULT_FOOTPRINT_RADIUS):
+        p1_in_map_cv = (
+            np.array([p1[0], -p1[1]]) * self.m_to_pix_ratio + self.origin
+        ).astype(np.int32)
+        p2_in_map_cv = (
+            np.array([p2[0], -p2[1]]) * self.m_to_pix_ratio + self.origin
+        ).astype(np.int32)
+
+        t = p2_in_map_cv - p1_in_map_cv
+
+        base_radius_in_map = int(1.1 * base_radius * self.m_to_pix_ratio)
+        n = (np.array([t[1], -t[0]]) / np.linalg.norm(t) * (base_radius_in_map)).astype(
+            np.int32
+        )
+
+        poly = []
+        poly.append(p1_in_map_cv + n)
+        poly.append(poly[-1] + t)
+        poly.append(poly[-1] - 2 * n)
+        poly.append(poly[-1] - t)
+        poly = np.array(poly).reshape(1, -1, 2)
+
+        filter = np.zeros_like(self.grid)
+        cv2.circle(
+            img=filter,
+            center=p1_in_map_cv,
+            radius=base_radius_in_map,
+            color=1,
+            thickness=-1,
+        )
+        cv2.circle(
+            img=filter,
+            center=p2_in_map_cv,
+            radius=base_radius_in_map,
+            color=1,
+            thickness=-1,
+        )
+        cv2.fillPoly(img=filter, pts=poly, color=1, lineType=1)
+
+        points = self.grid[filter == 1]
+        return (
+            OccupancyGridState.OBSTACLES not in points
+            and OccupancyGridState.UNKNOWN not in points
+        )
 
     def sample_uniform(self):
         rmin, rmax, cmin, cmax = bbox(self.grid != OccupancyGridState.UNKNOWN)

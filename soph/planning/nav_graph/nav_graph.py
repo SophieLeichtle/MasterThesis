@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+import random
 
 
 class Node:
@@ -11,6 +12,8 @@ class Node:
         """
         Set parent of this node to a new parent, as well as set the current parents parent to this node.
         """
+        if self.parent == new_parent:
+            return
         if self.parent is not None:
             self.parent.set_parent_recursive(self)
         self.parent = new_parent
@@ -42,6 +45,13 @@ class Node:
             nodes.insert(0, node)
             node = node.parent
         return nodes
+
+    def resample_position(self, occupancy_map, range=0.2):
+        original_pos = self.position
+        while not occupancy_map.check_if_free(self.position):
+            self.position = original_pos + np.array(
+                [random.uniform(-range, range), random.uniform(-range, range)]
+            )
 
 
 class NavGraph:
@@ -84,15 +94,16 @@ class NavGraph:
                 best_dist = dist
         return closest_node
 
-    def get_near_nodes(self, node, map, max_radius=2.0):
+    def get_near_nodes(self, node, map, max_radius=2.0, include_self=False):
         """
         Get list of nodes with Line of Sight to given node within a maximum radius.
         """
         near = []
         for n in self.nodes:
             if n == node or n == node.parent:
+                if include_self:
+                    near.append(n)
                 continue
-            # TODO Add check if line of sight
             if np.linalg.norm(n.position - node.position) <= max_radius:
                 n_in_map = map.m_to_px(n.position)
                 node_in_map = map.m_to_px(node.position)
@@ -131,7 +142,9 @@ class NavGraph:
             current_cost += cost
             total_cost -= cost
 
-    def update_with_robot_pos(self, robot_pos, map, min_dist=1):
+    def update_with_robot_pos(
+        self, robot_pos, map, endpoint=False, min_dist=0.2, max_dist=1
+    ):
         """
         Update the graph with a new robot position.
         If the current root is the closest to the new position, a new node is added and root is moved.
@@ -153,7 +166,7 @@ class NavGraph:
                 self.move_root(closest_node)
                 dist = closest_dist
 
-        if dist > min_dist:
+        if dist > max_dist or (endpoint and dist > min_dist):
             logging.info(
                 "Adding nav_node at " + f"{robot_pos[0]:.2f}, {robot_pos[1]:.2f}"
             )
@@ -161,4 +174,9 @@ class NavGraph:
             self.move_root(new_node)
             self.rewire_with_new_node(new_node, map, 1.1 * original_dist)
         if previous_root is not None:
-            self.rewire_two_nodes(closest_node, previous_root)
+            self.rewire_with_new_node(self.root, map)
+
+    def update_occlusions(self, occupancy_map, radius):
+        near_nodes = self.get_near_nodes(self.root, occupancy_map, radius, True)
+        for node in near_nodes:
+            node.resample_position(occupancy_map)
