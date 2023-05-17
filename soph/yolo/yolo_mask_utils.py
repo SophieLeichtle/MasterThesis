@@ -23,7 +23,7 @@ import os
 
 
 @torch.no_grad()
-def create_model(directory="yolo_files"):
+def create_model(directory="../yolo_files"):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     with open(os.path.join(directory, "hyp.scratch.mask.yaml")) as f:

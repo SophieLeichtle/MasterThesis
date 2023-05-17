@@ -130,12 +130,12 @@ class DetectionTool:
                         if point[2] > 0.05:
                             points.append(point)
                 center, inliers = center_ransac(points)
-                new_detection = self.register_definitive_detection(inliers, center)
-                if new_detection is not None:
+                detection = self.register_definitive_detection(inliers, center)
+                if detection is not None:
                     logging.info(
                         "New Detection Located at %.2f, %.2f",
-                        new_detection.position[0],
-                        new_detection.position[1],
+                        detection.position[0],
+                        detection.position[1],
                     )
                     new_detection = True
             else:
@@ -147,6 +147,7 @@ class DetectionTool:
                         poi[0],
                         poi[1],
                     )
+                    new_detection = True
 
         return new_detection
 

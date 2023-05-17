@@ -260,12 +260,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c",
         "--config",
-        choices=["beechwood", "wainscott", "ihlen", "benevolence0", "benevolence2"],
+        choices=["beechwood", "wainscott", "benevolence0"],
+        default="beechwood",
     )
     parser.add_argument(
         "-m",
         "--method",
         choices=["random", "euclid", "simple", "visible", "info", "fusion"],
+        default="visible",
     )
     args = parser.parse_args()
     if args.method == "random":
@@ -282,6 +284,6 @@ if __name__ == "__main__":
         m = FrontierSelectionMethod.FUSION
 
     dir_path = initiate_logging(
-        "exploration.log", args.config + "/" + args.method + "/navgraph"
+        "exploration.log", "explore/" + args.config + "/" + args.method + "/navgraph"
     )
     main(dir_path, args.config, m)

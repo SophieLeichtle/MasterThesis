@@ -46,9 +46,11 @@ class Node:
             node = node.parent
         return nodes
 
-    def resample_position(self, occupancy_map, range=0.2):
+    def resample_position(self, occupancy_map, range=0.2, max_iters=100):
         original_pos = self.position
-        while not occupancy_map.check_if_free(self.position):
+        iters = 0
+        while not occupancy_map.check_if_free(self.position) and iters < max_iters:
+            iters += 1
             self.position = original_pos + np.array(
                 [random.uniform(-range, range), random.uniform(-range, range)]
             )

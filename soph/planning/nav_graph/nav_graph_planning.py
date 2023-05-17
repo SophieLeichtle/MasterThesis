@@ -94,7 +94,7 @@ def next_frontier(env, occupancy_map, nav_graph, method, fusion_weights=(0.7, 0.
         )
 
     for frontier, dist, closest_node in frontiers:
-        if closest_node is None:
+        if closest_node is None or method is FrontierSelectionMethod.FUSION:
             dist, closest_node = frontier_distance_simple(
                 frontier, robot_pos, occupancy_map, nav_graph
             )

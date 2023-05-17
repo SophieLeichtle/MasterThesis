@@ -265,6 +265,8 @@ class OccupancyGrid2D:
         ).astype(np.int32)
 
         t = p2_in_map_cv - p1_in_map_cv
+        if np.linalg.norm(t) == 0:
+            return self.check_if_free(p1, base_radius)
 
         base_radius_in_map = int(1.1 * base_radius * self.m_to_pix_ratio)
         n = (np.array([t[1], -t[0]]) / np.linalg.norm(t) * (base_radius_in_map)).astype(

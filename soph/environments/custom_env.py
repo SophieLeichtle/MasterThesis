@@ -417,7 +417,6 @@ class CustomEnv(BaseEnv):
         is_robot = isinstance(obj, BaseRobot)
 
         self.set_pos_orn_with_z_offset(obj, pos, orn)
-
         if is_robot:
             obj.reset()
             obj.keep_still()

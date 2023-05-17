@@ -1,13 +1,13 @@
 #!/bin/bash
 
-configs=(beechwood)
-methods=('random' 'euclid' 'simple' 'visible' 'info' 'fusion')
-iters=1
+configs=('beechwood' 'wainscott')
+methods=('fusion')
+iters=10
 
-for config in "${configs[@]}"; do
-    for method in "${methods[@]}"; do
-        for ((i=0; i<iters; ++i)); do
-            python explore_rtrrtstar.py -c "$config" -m "$method"
+for ((i=0; i<iters; ++i)); do
+    for config in "${configs[@]}"; do
+        for method in "${methods[@]}"; do
+            python search_navgraph.py -c "$config" -m "$method"
         done
     done
 done

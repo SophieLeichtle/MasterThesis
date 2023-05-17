@@ -14,6 +14,8 @@ from scipy.ndimage import binary_erosion, binary_dilation
 def spin_and_update(env, occupancy_map):
     robot_pos = env.robots[0].get_position()[:2]
     robot_theta = env.robots[0].get_rpy()[2]
+    map_cv = cv2.cvtColor(occupancy_map.grid * 255, cv2.COLOR_GRAY2RGB)
+    cv2.imwrite("pre.png", map_cv)
     for i in range(10):
         new_robot_theta = robot_theta + 0.2 * np.pi
         plan = [robot_pos[0], robot_pos[1], new_robot_theta]
@@ -35,6 +37,12 @@ def spin_and_update(env, occupancy_map):
         # Sample points from depth sensor to accompany lidar occupancy grid
         depth = state["depth"]
         occupancy_map.update_from_depth(env, depth, 5000)
+
+        map_cv = cv2.cvtColor(scan_grid * 255, cv2.COLOR_GRAY2RGB)
+        cv2.imwrite(f"{i}.png", map_cv)
+    map_cv = cv2.cvtColor(occupancy_map.grid * 255, cv2.COLOR_GRAY2RGB)
+    cv2.imwrite("post.png", map_cv)
+    input("enter")
 
 
 def update_grid_with_scan(env, occupancy_map):

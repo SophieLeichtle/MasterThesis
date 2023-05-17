@@ -247,14 +247,13 @@ def main(dir_path, config, frontier_method):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-c",
-        "--config",
-        choices=["beechwood", "wainscott", "ihlen", "benevolence0", "benevolence2"],
+        "-c", "--config", choices=["beechwood", "wainscott"], default="beechwood"
     )
     parser.add_argument(
         "-m",
         "--method",
         choices=["random", "euclid", "simple", "visible", "info", "fusion"],
+        default="visible",
     )
     args = parser.parse_args()
     if args.method == "random":
@@ -271,6 +270,6 @@ if __name__ == "__main__":
         m = FrontierSelectionMethod.FUSION
 
     dir_path = initiate_logging(
-        "exploration.log", args.config + "/" + args.method + "/rtrrtstar"
+        "exploration.log", "explore/" + args.config + "/" + args.method + "/rtrrtstar"
     )
     main(dir_path, args.config, m)
